@@ -9,10 +9,16 @@ import { startLife } from './core/life.js';
 import { isViewing } from './core/chat.js';
 import { appIcon } from './phone/icons.js';
 
+// 壁纸图和模糊度放在 CSS 变量里（锁屏的图在 ::before 上，模糊不会糊到时间和通知）
 function walls() {
-  const set = (el, src, fallback) => { el.style.backgroundImage = src ? `url("${src}")` : ''; el.classList.toggle('def', !src); };
-  set($('#wall'), D.file('wallHome'));
-  set($('#lock'), D.file('wallLock'));
+  const set = (el, k) => {
+    const src = D.file(k);
+    el.style.setProperty('--wall', src ? `url("${src}")` : 'none');
+    el.style.setProperty('--wb', (src ? D.wallBlur(k) : 0) + 'px');
+    el.classList.toggle('def', !src);
+  };
+  set($('#wall'), 'wallHome');
+  set($('#lock'), 'wallLock');
 }
 
 // 顶部横幅：不在那个对话里时，来消息了从上面滑下来

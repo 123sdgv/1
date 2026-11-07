@@ -1,4 +1,12 @@
 // 通用部件：h()、线条图标、页面栈、页、底部面板、菜单、对话框、轻提示、表单行、头像、选图
+
+// 浏览器原生的 append(null) 会插进一个 "null" 文字。这里让它跳过 null / false，写条件部件时省心
+for (const proto of [Element.prototype, DocumentFragment.prototype]) {
+  for (const fn of ['append', 'prepend', 'before', 'after', 'replaceWith']) {
+    const orig = proto[fn];
+    if (orig) proto[fn] = function (...xs) { return orig.apply(this, xs.filter((x) => x != null && x !== false)); };
+  }
+}
 export function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -26,11 +34,9 @@ const P = {
   plusc: '<circle cx="12" cy="12" r="8.6"/><path d="M12 8v8M8 12h8"/>',
   more: '<circle cx="6" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.3" fill="currentColor" stroke="none"/>',
   send: '<path d="M4.6 11.6 19.4 5l-6.2 14.4-2.4-6.2z"/><path d="m10.8 13.2 3.4-3.4"/>',
-  spark: '<path d="M12 3.6c.5 3.9 1.6 5 5.6 5.6-4 .6-5.1 1.7-5.6 5.6-.5-3.9-1.6-5-5.6-5.6 4-.6 5.1-1.7 5.6-5.6z"/><path d="M18 14.4c.2 1.7.7 2.2 2.4 2.4-1.7.2-2.2.7-2.4 2.4-.2-1.7-.7-2.2-2.4-2.4 1.7-.2 2.2-.7 2.4-2.4z"/>',
   stop: '<rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/>',
   photo: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.6"/><circle cx="9" cy="9.6" r="1.7"/><path d="m4 17 4.6-4.4 3.2 3 3.4-3.6 4.8 5"/>',
   camera: '<path d="M4 8.6a2 2 0 0 1 2-2h2l1.4-2h5.2l1.4 2h2a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.6" r="3.4"/>',
-  red: '<rect x="5" y="3.6" width="14" height="16.8" rx="2.2"/><path d="M5 8.4c2.2 2 4.4 3 7 3s4.8-1 7-3"/><circle cx="12" cy="11.4" r="1.9"/>',
   pay: '<path d="M6.5 9.4h11.6l-3.2-3.2M17.5 14.6H5.9l3.2 3.2"/>',
   heart: '<path d="M12 19.2S4.4 14.6 4.4 9.2A3.9 3.9 0 0 1 12 7.6a3.9 3.9 0 0 1 7.6 1.6c0 5.4-7.6 10-7.6 10z"/>',
   heartf: '<path d="M12 19.2S4.4 14.6 4.4 9.2A3.9 3.9 0 0 1 12 7.6a3.9 3.9 0 0 1 7.6 1.6c0 5.4-7.6 10-7.6 10z" fill="currentColor"/>',
@@ -65,6 +71,11 @@ const P = {
   info: '<circle cx="12" cy="12" r="8.4"/><path d="M12 10.8v5.4"/><circle cx="12" cy="7.9" r=".9" fill="currentColor" stroke="none"/>',
   wand: '<path d="m5 19 9.4-9.4M14.4 9.6l1.8-1.8 1.4 1.4-1.8 1.8z"/><path d="M17 3.8v2M18 4.8h-2M20.2 8v1.6M21 8.8h-1.6"/>',
   left: '<path d="M14.6 6.4 9 12l5.6 5.6"/>',
+  voice: '<path d="M8 9.4a4 4 0 0 1 0 5.2M11.2 7a7.4 7.4 0 0 1 0 10M14.6 4.8a10.6 10.6 0 0 1 0 14.4"/>',
+  mic: '<rect x="9" y="3.6" width="6" height="10.4" rx="3"/><path d="M5.8 11.4a6.2 6.2 0 0 0 12.4 0M12 17.6v2.8"/>',
+  smile: '<circle cx="12" cy="12" r="8.4"/><path d="M8.6 14.2c1.8 2 5 2 6.8 0"/><circle cx="9.2" cy="10" r=".9" fill="currentColor" stroke="none"/><circle cx="14.8" cy="10" r=".9" fill="currentColor" stroke="none"/>',
+  ring: '<circle cx="12" cy="12" r="8.4"/>',
+  ringck: '<circle cx="12" cy="12" r="9" fill="currentColor" stroke="none"/><path d="m8 12.2 2.8 2.8L16.2 9.6" stroke="#fff" stroke-width="1.9"/>',
   right: '<path d="M9.4 6.4 15 12l-5.6 5.6"/>',
 };
 export const icon = (name, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;

@@ -2,7 +2,7 @@
 import * as D from './data.js';
 import { chat } from './api.js';
 import * as C from './context.js';
-import { parseChat, stripThink, partPreview } from './parse.js';
+import { parseChat, stripThink, partPreview, quoteText } from './parse.js';
 import { schedulePostReacts } from './life.js';
 
 const running = new Map(); // key -> AbortController
@@ -33,6 +33,9 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
     rec.cur = rec.alts.length - 1;
     rec.ts = Date.now();
   } else {
+    // 之前没回成、只剩一行报错的那条，这次重新回了就不留着
+    const stale = D.msgs(cid).filter((r) => !(r.role === 'them' && r.error && !D.partsOf(r).length));
+    if (stale.length !== D.msgs(cid).length) D.setMsgs(cid, stale);
     rec = D.addMsg(cid, { role: 'them', alts: [[]], away: away || undefined });
   }
   rec.pending = true;
@@ -55,6 +58,7 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
     });
     if (away && /^[\s（(]*不发[\s)）。.]*$/.test(stripThink(text))) { rec.alts[rec.cur] = []; return null; }
     const { parts, acts } = parseChat(text);
+    if (!parts.length && !acts.length && !away) throw new Error('这次回复是空的');
     rec.alts[rec.cur] = parts;
     finish(c, rec, acts);
     return rec;
@@ -70,19 +74,52 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
     }
     D.touchMsgs(cid);
     D.emit('typing', cid);
+    // 他回的时候你又发了消息：接着回你后来说的
+    if (!ctrl.signal.aborted && !rec.error && !away && D.partsOf(rec).length && lastIsMe(cid)) autoReply(cid, 1200);
   }
 }
 
-// 回复写完以后：照片进相册、处理红包转账、发动态、加未读、发通知
+// ── 你发完消息他自动回：等你停一下（还在打字就再等等），连发几条也只回一次 ──
+const autoT = new Map();
+const lastIsMe = (cid) => [...D.msgs(cid)].reverse().find((r) => r.role !== 'note')?.role === 'me';
+export function autoReply(cid, wait = 1800) {
+  clearTimeout(autoT.get(cid));
+  autoT.set(cid, setTimeout(() => {
+    autoT.delete(cid);
+    if (!running.has(cid) && lastIsMe(cid)) reply(cid);
+  }, wait));
+}
+/** 输入框里在打字：他先别回 */
+export function typing(cid) { if (autoT.has(cid)) autoReply(cid, 3500); }
+export const waiting = (cid) => autoT.has(cid);
+
+// 引用的是谁的话：从后往前找哪条消息里有这几个字
+export function quoteWho(cid, text, beforeId = null) {
+  const key = String(text || '').replace(/…$/, '').slice(0, 12);
+  let list = D.msgs(cid);
+  if (beforeId) { const i = list.findIndex((r) => r.id === beforeId); if (i >= 0) list = list.slice(0, i); }
+  for (let i = list.length - 1; i >= 0; i--) {
+    const r = list[i];
+    if (r.role === 'note') continue;
+    if (D.partsOf(r).some((p) => quoteText(p).includes(key))) return r.role;
+  }
+  return 'me';
+}
+
+// 回复写完以后：照片进相册、日程进日历、处理转账、发动态、加未读、发通知
 function finish(c, rec, acts) {
   const parts = D.partsOf(rec);
-  for (const p of parts) if (p.t === 'photo') D.addPhoto({ acc: c.acc, desc: p.desc, who: c.id });
+  for (const p of parts) {
+    if (p.t === 'photo') D.addPhoto({ acc: c.acc, desc: p.desc, who: c.id });
+    if (p.t === 'event') D.addEvent({ date: p.date, title: p.title, yearly: p.yearly, by: c.id });
+    if (p.quote && !p.quote.who) p.quote.who = quoteWho(c.id, p.quote.text, rec.id);
+  }
   const list = D.msgs(c.id);
-  const mine = (t, state) => [...list].reverse().filter((r) => r.role === 'me').flatMap((r) => D.partsOf(r)).find((p) => p.t === t && p.state === state);
+  // 你转给他、他还没处理的那笔（老存档里的红包也算）
+  const waitPay = () => [...list].reverse().filter((r) => r.role === 'me').flatMap((r) => D.partsOf(r)).find((p) => (p.t === 'pay' && p.state === 'wait') || (p.t === 'red' && p.state === 'open'));
   for (const a of acts) {
-    if (a.act === 'takeRed') { const p = mine('red', 'open'); if (p) { p.state = 'taken'; note(c.id, `${D.nameOf(c)}领取了你的红包`); } }
-    if (a.act === 'takePay') { const p = mine('pay', 'wait'); if (p) { p.state = 'taken'; note(c.id, `${D.nameOf(c)}已收下你的转账`); } }
-    if (a.act === 'backPay') { const p = mine('pay', 'wait'); if (p) { p.state = 'back'; note(c.id, `${D.nameOf(c)}退还了你的转账`); } }
+    if (a.act === 'takePay') { const p = waitPay(); if (p) { p.state = 'taken'; note(c.id, `${D.nameOf(c)}已收下你的转账`); } }
+    if (a.act === 'backPay') { const p = waitPay(); if (p) { p.state = 'back'; note(c.id, `${D.nameOf(c)}退还了你的转账`); } }
     if (a.act === 'post') {
       const m = D.saveMoment({ id: D.uid(), acc: c.acc, who: c.id, text: a.text, photos: [], ts: Date.now(), likes: [], comments: [], jobs: [] });
       schedulePostReacts(m);
@@ -97,10 +134,11 @@ function finish(c, rec, acts) {
 
 export function note(cid, text) { return D.addMsg(cid, { role: 'note', alts: [[{ t: 'note', text }]] }); }
 
-/** 你发一条（可以是几个部件） */
+/** 你发一条（可以是几个部件）。发完他会自动回 */
 export function send(cid, parts) {
   const rec = D.addMsg(cid, { role: 'me', alts: [parts] });
   for (const p of parts) if (p.t === 'photo') D.addPhoto({ acc: D.charById(cid)?.acc, desc: p.desc, who: 'me' });
+  autoReply(cid);
   return rec;
 }
 

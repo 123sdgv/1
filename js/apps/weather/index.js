@@ -1,4 +1,4 @@
-// 天气：Open-Meteo 的真实天气。选城市（搜名字或用定位），角色也会知道你那边的天气。
+// 天气：Open-Meteo 的真实天气。搜城市名选一个，角色也会知道你那边的天气。
 import { h, Stack, page, btnIc, sheet, toast } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { getWeather, searchCity, describe, wxIcon } from '../../core/weather.js';
@@ -61,7 +61,6 @@ export function mount(body, { close }) {
     const res = h('div', { class: 'pick-list' });
     const s = sheet({ title: '选城市', full: true, body: h('div', {},
       h('div', { class: 'wx-search' }, inp, h('button', { class: 'btn', text: '搜', onclick: go })),
-      h('button', { class: 'btn wide ghost', text: '用现在的位置', onclick: locate }),
       res) });
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
     setTimeout(() => inp.focus(), 300);
@@ -76,12 +75,6 @@ export function mount(body, { close }) {
         if (!list.length) res.append(h('div', { class: 'empty', text: '没找到，换个写法试试' }));
         for (const c of list) res.append(h('button', { class: 'pick-it', onclick: () => choose(c) }, h('span', {}, h('b', { text: c.name }), h('small', { text: c.region }))));
       } catch { res.innerHTML = ''; res.append(h('div', { class: 'empty', text: '查不到，检查一下网络' })); }
-    }
-    function locate() {
-      if (!navigator.geolocation) { toast('这台设备不能定位'); return; }
-      toast('正在定位…');
-      navigator.geolocation.getCurrentPosition((p) => choose({ name: '当前位置', lat: Math.round(p.coords.latitude * 100) / 100, lon: Math.round(p.coords.longitude * 100) / 100 }),
-        () => toast('没拿到位置：可能没给权限'), { timeout: 12000, maximumAge: 600000 });
     }
     function choose(c) { s.close(); D.setWeatherConf({ name: c.name, lat: c.lat, lon: c.lon }); draw(true); }
   }

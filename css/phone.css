@@ -1,7 +1,8 @@
 /* 手机本体：壁纸、主屏幕、小组件、Dock、App 窗口、锁屏、密码、横幅 */
-#wall, #lock { background-size: cover; background-position: center; }
-#wall { position: absolute; inset: 0; }
-#wall.def { background: radial-gradient(120% 70% at 20% 0%, #4a4a4d 0%, transparent 60%), radial-gradient(90% 60% at 100% 100%, #3a3a3c 0%, transparent 60%), linear-gradient(170deg, #262628, #0e0e0f); }
+/* 壁纸：图在 --wall，模糊在 --wb（main.js 设）。往外多铺一圈，模糊的边不会透出黑底 */
+#wall, #lock::before { background: var(--wall, none) center / cover no-repeat; filter: blur(var(--wb, 0px)); }
+#wall { position: absolute; inset: calc(var(--wb, 0px) * -2); }
+#wall.def { background: radial-gradient(120% 70% at 20% 0%, #4a4a4d 0%, transparent 60%), radial-gradient(90% 60% at 100% 100%, #3a3a3c 0%, transparent 60%), linear-gradient(170deg, #262628, #0e0e0f); filter: none; }
 
 /* ── 主屏幕 ── */
 #home { position: absolute; inset: 0; display: flex; flex-direction: column; padding-top: var(--top); color: #fff; }
@@ -66,20 +67,30 @@
 .wg-wx.l .wg-wx-days b { margin-left: auto; }
 
 .wg-cal { height: 100%; display: flex; flex-direction: column; }
-.wg-cal-h small { display: block; font-size: 12px; color: var(--ink-3); font-weight: 600; }
-.wg-cal-h b { display: block; font-size: 36px; font-weight: 300; line-height: 1.1; }
-.wg-cal.m { flex-direction: row; gap: 16px; }
-.wg-cal-ev { margin-top: auto; font-size: 12.5px; min-width: 0; flex: 1; }
-.wg-cal.m .wg-cal-ev { margin-top: 2px; border-left: 1px solid var(--line); padding-left: 14px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
-.wg-cal-ev > div { display: flex; justify-content: space-between; gap: 6px; }
-.wg-cal-ev span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wg-cal-ev em { font-style: normal; color: var(--ink-3); flex: none; }
-.wg-cal-ev .none { color: var(--ink-3); }
-.wg-cal.l > b { font-size: 15px; margin-bottom: 8px; }
-.wg-month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px 0; text-align: center; font-size: 13px; }
+.wg-cal-h small { display: block; font-size: 12.5px; color: var(--ink-3); font-weight: 600; }
+.wg-cal-h b { display: block; font-size: 38px; font-weight: 300; line-height: 1.1; }
+.wg-cal.m { flex-direction: row; gap: 14px; }
+.wg-cal.m .wg-cal-h { flex: none; }
+.wg-cal.s .wg-ag { margin-top: auto; }
+.wg-cal.m .wg-ag { flex: 1; min-width: 0; border-left: 1px solid var(--line); padding-left: 12px; display: flex; flex-direction: column; justify-content: center; }
+.wg-ag { min-width: 0; }
+.wg-ag.none { color: var(--ink-3); font-size: 14px; display: flex; align-items: center; }
+.wg-cal.s .wg-ag.none { margin-top: auto; }
+.wg-ag-it { display: flex; align-items: center; gap: 6px; min-height: 30px; }
+.wg-ck { flex: none; width: 30px; height: 30px; margin: 0 -2px 0 -6px; display: flex; align-items: center; justify-content: center; color: var(--ink); }
+.wg-ck .ic { width: 21px; height: 21px; stroke-width: 1.7; }
+.wg-ag-t { flex: 1; min-width: 0; font-size: 15px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wg-ag em { flex: none; font-style: normal; font-size: 12px; color: var(--ink-3); }
+.wg-ag-it.done .wg-ag-t { color: var(--ink-3); text-decoration: line-through; }
+.wg-ag-it.done .wg-ck { color: var(--ink-3); }
+.wg-ag.s .wg-ag-it { min-height: 28px; }
+.wg-ag.s .wg-ag-t { font-size: 14px; }
+.wg-cal.l > b { font-size: 15px; margin-bottom: 4px; }
+.wg-cal.l .wg-ag { margin-top: auto; padding-top: 6px; border-top: 1px solid var(--line); }
+.wg-month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px 0; text-align: center; font-size: 13px; }
 .wg-month i { font-style: normal; font-size: 11px; color: var(--ink-3); }
-.wg-month span { height: 26px; line-height: 26px; position: relative; }
-.wg-month span.on { background: var(--ink); color: #fff; border-radius: 50%; width: 26px; margin: 0 auto; }
+.wg-month span { height: 24px; line-height: 24px; position: relative; }
+.wg-month span.on { background: var(--ink); color: #fff; border-radius: 50%; width: 24px; margin: 0 auto; }
 .wg-month span.dot::after { content: ''; position: absolute; left: 50%; bottom: 0; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
 
 .wg-chat { height: 100%; display: flex; flex-direction: column; }
@@ -107,8 +118,12 @@
 .win .home-bar { pointer-events: auto; }
 
 /* ── 锁屏 ── */
-#lock { position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column; padding: calc(var(--top) + 26px) 14px var(--bot); color: #fff; transition: transform .42s var(--ez), opacity .42s; touch-action: none; }
-#lock.def { background: radial-gradient(100% 60% at 50% 0%, #48484b, transparent 70%), linear-gradient(180deg, #2c2c2e, #0b0b0c); }
+#lock { position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column; padding: calc(var(--top) + 26px) 14px var(--bot); color: #fff; background: #000; overflow: hidden; transition: transform .42s var(--ez), opacity .42s; touch-action: none; }
+#lock::before { content: ''; position: absolute; inset: calc(var(--wb, 0px) * -2); z-index: -1; }
+#lock.def::before { background: radial-gradient(100% 60% at 50% 0%, #48484b, transparent 70%), linear-gradient(180deg, #2c2c2e, #0b0b0c); filter: none; }
+/* 设置里调锁屏模糊时把锁屏露出来看效果 */
+#lock.peek { pointer-events: none; }
+.win.peek { opacity: 0; transition: opacity .25s; pointer-events: none; }
 #lock.gone { transform: translateY(-100%) !important; opacity: 0 !important; pointer-events: none; }
 #lock .home-bar i { background: rgba(255,255,255,.7); }
 .lk-head { text-align: center; text-shadow: 0 1px 8px rgba(0,0,0,.25); }

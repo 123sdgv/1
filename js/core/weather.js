@@ -17,11 +17,17 @@ const CODES = {
 };
 export const describe = (code) => CODES[code] || ['未知', 'cloud'];
 
+// 同名的地方很多（比如好几个村也叫「上海」），按人口排，大城市在前
 export async function searchCity(name) {
-  const r = await fetch(`${GEO}?name=${encodeURIComponent(name)}&count=8&language=zh&format=json`);
+  const r = await fetch(`${GEO}?name=${encodeURIComponent(name)}&count=12&language=zh&format=json`);
   if (!r.ok) throw new Error('查不到');
   const j = await r.json();
-  return (j.results || []).map((x) => ({ name: x.name, region: [x.admin1, x.country].filter(Boolean).join(' · '), lat: x.latitude, lon: x.longitude }));
+  const rank = (x) => (x.population || 0) + (/^PPL(C|A)$/.test(x.feature_code || '') ? 1e9 : 0);
+  return (j.results || []).sort((a, b) => rank(b) - rank(a)).map((x) => ({
+    name: x.name,
+    region: [...new Set([x.admin2, x.admin1, x.country].filter((v) => v && v !== x.name))].join(' · '),
+    lat: x.latitude, lon: x.longitude,
+  }));
 }
 
 let inflight = null;
@@ -50,14 +56,16 @@ export async function getWeather(force = false) {
 /** 缓存里的天气（不联网），给提示词和小组件用 */
 export function cached() { return weatherConf()?.cache?.data || null; }
 
-/** 一句话天气：「上海 多云 18°C，今天 14～20°C」 */
+/** 给角色看的天气：现在、今天、明天 */
 export function weatherLine() {
   const w = weatherConf(), d = cached();
   if (!w || !d?.current) return '';
-  const [txt] = describe(d.current.weather_code);
-  const t = Math.round(d.current.temperature_2m);
-  const lo = d.daily ? Math.round(d.daily.temperature_2m_min[0]) : null, hi = d.daily ? Math.round(d.daily.temperature_2m_max[0]) : null;
-  return `${w.name} ${txt} ${t}°C${lo != null ? `，今天 ${lo}～${hi}°C` : ''}`;
+  const c = d.current, dl = d.daily;
+  const now = `${w.name}，现在 ${describe(c.weather_code)[0]} ${Math.round(c.temperature_2m)}°C（体感 ${Math.round(c.apparent_temperature)}°C，湿度 ${c.relative_humidity_2m}%，风速 ${Math.round(c.wind_speed_10m)} km/h）`;
+  if (!dl) return now + '。';
+  const day = (i) => `${describe(dl.weather_code[i])[0]}，${Math.round(dl.temperature_2m_min[i])}～${Math.round(dl.temperature_2m_max[i])}°C${dl.precipitation_probability_max?.[i] != null ? `，降水概率 ${dl.precipitation_probability_max[i]}%` : ''}`;
+  const hmOf = (s) => (s ? s.slice(11, 16) : '');
+  return `${now}。今天 ${day(0)}${dl.sunset?.[0] ? `，日落 ${hmOf(dl.sunset[0])}` : ''}。${dl.time.length > 1 ? `明天 ${day(1)}。` : ''}`;
 }
 
 /** 天气小图标（黑白线条） */

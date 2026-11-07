@@ -1,14 +1,8 @@
-// 我的：当前身份的资料、人设、世界观、动态封面、聊天气泡；切换 / 新建身份；角色列表
-import { h, page, avatar, group, row, inputRow, areaRow, note, pickImage, toast, confirm, sheet, icon } from '../../core/ui.js';
+// 我的：当前身份的资料、人设、世界观、动态封面；切换 / 新建身份；角色列表
+import { h, avatar, group, row, inputRow, areaRow, note, toast, confirm, sheet, icon } from '../../core/ui.js';
+import { pickCrop } from '../../core/crop.js';
 import * as D from '../../core/data.js';
 import { editChar } from './char.js';
-
-export const BUBBLES = [
-  ['ink', '墨', '我黑你白'],
-  ['line', '线', '只有细边'],
-  ['gray', '灰', '浅灰底'],
-  ['paper', '纸', '宋体，像写信'],
-];
 
 export function mePane(ctx) {
   const el = h('div', { class: 'so-pane scroll' });
@@ -17,7 +11,7 @@ export function mePane(ctx) {
     el.innerHTML = '';
     el.append(
       h('div', { class: 'me-card', style: a.cover ? { backgroundImage: `url("${a.cover}")` } : null },
-        h('button', { class: 'me-av', onclick: async () => { const src = await pickImage({ max: 400, square: true }); if (src) D.saveAccount({ ...a, avatar: src }); } }, avatar(a.avatar, a.name, 'lg')),
+        h('button', { class: 'me-av', onclick: async () => { const r = await pickCrop({ aspect: 1, width: 400, round: true, title: '头像' }); if (r) D.saveAccount({ ...D.curAccount(), avatar: r.src }); } }, avatar(a.avatar, a.name, 'lg')),
         h('div', { class: 'me-nm' }, h('b', { text: a.name || '我' }), h('small', { text: a.sign || '还没有签名' }))),
       group('我的资料',
         inputRow({ label: '昵称', value: a.name, placeholder: '你的名字', onchange: (v) => D.saveAccount({ ...D.curAccount(), name: v.trim() || '我' }) }),
@@ -25,8 +19,6 @@ export function mePane(ctx) {
         row({ label: '动态封面', value: a.cover ? '已设置' : '默认', onclick: () => coverMenu() })),
       group('我的人设', areaRow({ value: a.persona, placeholder: '你在这个世界里是谁：年龄、职业、性格、和角色们的关系……角色会按这个认识你', rows: 5, onchange: (v) => D.saveAccount({ ...D.curAccount(), persona: v }) })),
       group('世界观', areaRow({ value: a.world, placeholder: '这个身份所在的世界：时代、地点、规则……这个身份下的所有角色共用', rows: 5, onchange: (v) => D.saveAccount({ ...D.curAccount(), world: v }) })),
-      group('聊天气泡', h('div', { class: 'bub-pick' }, BUBBLES.map(([k, n, d]) => h('button', { class: 'bp bub-' + k + (a.bubble === k ? ' on' : ''), onclick: () => D.saveAccount({ ...D.curAccount(), bubble: k }) },
-        h('span', { class: 'bp-demo' }, h('i', { class: 'bub them', text: '在吗' }), h('i', { class: 'bub me', text: '在' })), h('b', { text: n }), h('small', { text: d }))))),
       group('角色', ...D.chars().map((c) => row({ label: D.nameOf(c), right: h('span', { class: 'row-v', text: c.name !== D.nameOf(c) ? c.name : '' }), onclick: () => editChar(ctx, c.id) })),
         row({ label: '新建角色', icon: 'plus', onclick: () => editChar(ctx, null) })),
       group('身份', row({ label: '切换身份', icon: 'swap', onclick: () => switchAccount(ctx) }),
@@ -41,7 +33,7 @@ export function mePane(ctx) {
   function coverMenu() {
     const a = D.curAccount();
     const s = sheet({ title: '动态封面', body: h('div', {},
-      h('button', { class: 'btn wide', text: '从相册选一张', onclick: async () => { s.close(); const src = await pickImage({ max: 1100, quality: 0.82 }); if (src) D.saveAccount({ ...D.curAccount(), cover: src }); } }),
+      h('button', { class: 'btn wide', text: '从相册选一张', onclick: async () => { s.close(); const r = await pickCrop({ aspect: 1.6, width: 1100, title: '动态封面', quality: 0.84 }); if (r) D.saveAccount({ ...D.curAccount(), cover: r.src }); } }),
       a.cover ? h('button', { class: 'btn wide ghost', text: '用默认的', onclick: () => { s.close(); D.saveAccount({ ...D.curAccount(), cover: null }); } }) : null) });
   }
   draw();

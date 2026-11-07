@@ -1,5 +1,6 @@
-// 角色资料：新建 / 编辑。头像、名字、备注、网名和签名（可以让他自己起）、人设、认识谁
-import { h, page, avatar, group, row, inputRow, areaRow, note, pickImage, toast, confirm, btnIc } from '../../core/ui.js';
+// 角色资料：新建 / 编辑。头像、名字、备注、网名和签名（可以让他自己起）、人设、认识谁、他的生活（多久来找你、发动态、写日记、安静时间）
+import { h, page, avatar, group, row, inputRow, areaRow, note, toast, confirm, toggleRow, stepRow } from '../../core/ui.js';
+import { pickCrop } from '../../core/crop.js';
 import * as D from '../../core/data.js';
 import { makeProfile } from '../../core/life.js';
 import { openApp } from '../../phone/window.js';
@@ -8,11 +9,13 @@ export function editChar(ctx, cid) {
   const isNew = !cid;
   const c = isNew ? D.newChar() : structuredClone(D.charById(cid));
   if (!c) return;
+  c.life = D.lifeOf(c);
   const saveBtn = h('button', { class: 'tbtn', text: isNew ? '完成' : '保存' });
   const pg = page({ title: isNew ? '新建角色' : '资料', onBack: () => ctx.stack.pop(), right: saveBtn, big: false });
   const draw = () => {
     pg.scroll.innerHTML = '';
-    const av = h('button', { class: 'ce-av', onclick: async () => { const src = await pickImage({ max: 400, square: true }); if (src) { c.avatar = src; draw(); } } }, avatar(c.avatar, c.name, 'lg'), h('small', { text: c.avatar ? '换头像' : '设置头像' }));
+    const av = h('button', { class: 'ce-av', onclick: async () => { const r = await pickCrop({ aspect: 1, width: 400, round: true, title: '头像' }); if (r) { c.avatar = r.src; draw(); } } }, avatar(c.avatar, c.name, 'lg'), h('small', { text: c.avatar ? '换头像' : '设置头像' }));
+    const L = c.life, setL = (k) => (v) => { L[k] = v; };
     const netRow = inputRow({ label: '网名', value: c.net, placeholder: '他自己起', onchange: (v) => { c.net = v.trim(); } });
     const signRow = inputRow({ label: '签名', value: c.sign, placeholder: '他自己写', onchange: (v) => { c.sign = v.trim(); } });
     const others = D.chars().filter((x) => x.id !== c.id);
@@ -36,6 +39,16 @@ export function editChar(ctx, cid) {
         return h('label', { class: 'row' }, avatar(o.avatar, D.nameOf(o), 'xs'), h('span', { class: 'row-l', text: D.nameOf(o) }), sw);
       })) : null,
       others.length ? note('认识的人会互相在动态下面点赞、评论，他也知道那些人是谁。') : null,
+      group('他的生活',
+        toggleRow({ label: '很久没聊会来找你', sub: '打开手机时，他可能已经发来消息', value: L.away, onchange: setL('away') }),
+        stepRow({ label: '多久没聊算久', value: L.awayHours, min: 1, max: 72, unit: ' 小时', onchange: setL('awayHours') }),
+        toggleRow({ label: '自己发动态', value: L.post, onchange: setL('post') }),
+        stepRow({ label: '大概多久发一条', value: L.postHours, min: 2, max: 168, step: 2, unit: ' 小时', onchange: setL('postHours') }),
+        toggleRow({ label: '自己写日记', sub: '聊过一阵、停下来以后写', value: L.diary, onchange: setL('diary') }),
+        stepRow({ label: '至少隔多久写一篇', value: L.diaryHours, min: 2, max: 72, step: 2, unit: ' 小时', onchange: setL('diaryHours') }),
+        stepRow({ label: '别打扰你：从', value: L.quietFrom, min: 0, max: 23, unit: ' 点', onchange: setL('quietFrom') }),
+        stepRow({ label: '到', value: L.quietTo, min: 0, max: 23, unit: ' 点', onchange: setL('quietTo') })),
+      note('这段时间里他不会来找你，也不发动态。网页关着的时候什么都不会发生，下次打开时才补上。这些都会花 API 额度，嫌费就关掉。'),
       !isNew ? group('', row({ label: '日记', icon: 'book', onclick: () => openApp('diary', { char: c.id }) }),
         row({ label: '他记得的关于你的事', icon: 'note', onclick: () => openApp('memo', { char: c.id }) }),
         row({ label: '线下见面', icon: 'door', onclick: () => { const st = D.storiesOf().find((s) => s.char === c.id); openApp('offline', st ? { story: st.id } : { newFor: c.id }); } })) : null,

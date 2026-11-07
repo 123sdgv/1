@@ -12,11 +12,8 @@ const SETTINGS = {
   temperature: 0.9,
   maxTokens: 1500,
   histLen: 40,          // 聊天时带最近多少条记录
-  proactive: true,      // 离开久了角色会来找你
-  awayHours: 6,         // 离开多少小时算久
-  charPosts: true,      // 角色自己发动态
-  autoDiary: true,      // 角色自动写日记
-  quietFrom: 1, quietTo: 8, // 这段时间角色不来找你（几点到几点）
+  // 下面这几项现在每个角色单独设（角色资料里），这里只当老存档的默认值
+  proactive: true, awayHours: 6, charPosts: true, autoDiary: true, quietFrom: 1, quietTo: 8,
 };
 export const settings = () => ({ ...SETTINGS, ...S.get('settings', {}) });
 export function setSettings(patch) { S.set('settings', { ...S.get('settings', {}), ...patch }); emit('settings'); }
@@ -33,6 +30,9 @@ export function setLock(patch) { S.set('lock', { ...lockConf(), ...patch }); }
 
 export const file = (k) => S.get('file.' + k, null);
 export function setFile(k, v) { if (v == null) S.del('file.' + k); else S.set('file.' + k, v); emit('file', k); }
+// 壁纸模糊度（px），键和 file 一样：wallLock / wallHome
+export const wallBlur = (k) => S.get('wallBlur', {})[k] || 0;
+export function setWallBlur(k, v) { S.set('wallBlur', { ...S.get('wallBlur', {}), [k]: v }); emit('file', k); }
 
 // ── 账号（你的身份）──
 export const accounts = () => S.get('accounts', []);
@@ -76,7 +76,18 @@ export const charById = (id) => allChars().find((c) => c.id === id) || null;
 // 显示用的名字：你给的备注 > 他自己起的网名 > 名字（像聊天软件那样）
 export const nameOf = (c) => (c ? c.nick || c.net || c.name || '未命名' : '');
 export function newChar(acc = curAccount().id) {
-  return { id: uid(), acc, name: '', nick: '', avatar: null, persona: '', net: '', sign: '', knows: [], createdAt: now() };
+  return { id: uid(), acc, name: '', nick: '', avatar: null, persona: '', net: '', sign: '', knows: [], life: lifeOf({}), createdAt: now() };
+}
+// 他的生活（每个角色单独设）：多久没聊来找你、多久发一条动态、多久写一篇日记、几点到几点别打扰
+export function lifeOf(c) {
+  const st = settings();
+  return {
+    away: st.proactive, awayHours: st.awayHours,
+    post: st.charPosts, postHours: 24,
+    diary: st.autoDiary, diaryHours: 20,
+    quietFrom: st.quietFrom, quietTo: st.quietTo,
+    ...(c?.life || {}),
+  };
 }
 export function saveChar(c) {
   const list = allChars();
@@ -97,7 +108,9 @@ export function removeChar(id, quiet) {
 
 // ── 聊天记录 ──
 // 一条记录 { id, role:'me'|'them'|'note', ts, alts:[[部件...]], cur }
-// 部件 { t:'text', text } { t:'photo', desc } { t:'red', amount, note, state } { t:'pay', amount, note, state } { t:'note', text }
+// 部件 { t:'text', text, quote? } { t:'voice', text, tone, sec, quote? } { t:'sticker', name } { t:'photo', desc }
+//      { t:'pay', amount, note, state } { t:'event', date, title, yearly } { t:'note', text }
+//      （老存档里可能还有 t:'red'，按转账显示）  quote = { who:'me'|'them', text }
 export const msgs = (cid) => S.get('msgs.' + cid, []);
 export function setMsgs(cid, arr) { S.set('msgs.' + cid, arr); emit('msgs', cid); }
 export function addMsg(cid, rec) {
@@ -142,9 +155,51 @@ export function setDiaries(cid, arr) { S.set('diary.' + cid, arr); emit('diary',
 export const memos = (cid) => S.get('memo.' + cid, []);
 export function setMemos(cid, arr) { S.set('memo.' + cid, arr); emit('memo', cid); }
 
-// ── 日历（整台手机共用）── { id, date, title, note, yearly }
+// ── 日历（整台手机共用）── { id, date, title, note, yearly, done:[打过勾的日期], by?:角色id }
 export const events = () => S.get('events', []);
 export function setEvents(arr) { S.set('events', arr); emit('events'); }
+const pad2 = (n) => String(n).padStart(2, '0');
+export const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+/** 某件事在 from 当天或之后最近的一次（每年的往后找） */
+export function nextDate(e, from = today()) {
+  if (!e.yearly) return e.date;
+  const y = Number(from.slice(0, 4));
+  let d = `${y}${e.date.slice(4)}`;
+  if (d < from) d = `${y + 1}${e.date.slice(4)}`;
+  return d;
+}
+/** 从今天起 days 天内的日程：[{ e, at, done }]，按日期排 */
+export function upcoming(days = 3660) {
+  const t = today(), lim = new Date(Date.now() + days * 86400000);
+  const end = `${lim.getFullYear()}-${pad2(lim.getMonth() + 1)}-${pad2(lim.getDate())}`;
+  return events().map((e) => { const at = nextDate(e, t); return { e, at, done: isDone(e, at) }; })
+    .filter((x) => x.at >= t && x.at <= end)
+    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.done - b.done)); // 同一天没做完的在前
+}
+export const eventsOn = (date) => events().filter((e) => (e.yearly ? e.date.slice(5) === date.slice(5) && e.date <= date : e.date === date));
+export const isDone = (e, date) => (e.done || []).includes(date);
+export function toggleDone(id, date) {
+  setEvents(events().map((e) => (e.id !== id ? e : { ...e, done: isDone(e, date) ? e.done.filter((d) => d !== date) : [...(e.done || []), date] })));
+}
+/** 加一件事（角色记的也走这里）；同一天同名的不重复加。返回那件事 */
+export function addEvent({ date, title, note = '', yearly = false, by = null }) {
+  const same = events().find((e) => e.title === title && (yearly ? e.yearly && e.date.slice(5) === date.slice(5) : e.date === date));
+  if (same) return same;
+  const e = { id: uid(), date, title, note, yearly, done: [], by };
+  setEvents([...events(), e]);
+  return e;
+}
+
+// ── 表情包（所有身份、所有角色共用）── { id, name（这张是什么意思）, src }
+export const stickers = () => S.get('stickers', []);
+export function setStickers(arr) { S.set('stickers', arr); emit('stickers'); }
+/** 按名字找：先找一模一样的，再找互相包含的 */
+export function stickerByName(name) {
+  const n = String(name || '').trim();
+  if (!n) return null;
+  const all = stickers();
+  return all.find((x) => x.name === n) || all.filter((x) => x.name.includes(n) || n.includes(x.name)).sort((a, b) => b.name.length - a.name.length)[0] || null;
+}
 
 // ── 相册 ── { id, acc, desc, who, ts }
 export const photos = () => S.get('photos', []);

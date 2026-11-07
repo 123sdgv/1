@@ -6,6 +6,7 @@ import * as C from './context.js';
 import { parseJSON } from './parse.js';
 import { reply as charReply } from './chat.js';
 import { ymd } from './time.js';
+import { getWeather } from './weather.js';
 
 const MIN = 60000, HOUR = 60 * MIN;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -96,14 +97,14 @@ export async function writeDiary(c, { force = false } = {}) {
   D.emit('notify', { diary: c.id, text: `${D.nameOf(c)}写了一篇日记` });
   return d;
 }
-function diaryDue(c) {
+function diaryDue(c, life) {
   const ds = D.diaries(c.id);
   const lastTs = ds.length ? ds[ds.length - 1].ts : c.createdAt || 0;
   const since = ds.length ? ds[ds.length - 1].upto || lastTs : 0;
   const log = C.diaryLog(c, since);
   if (log.count < 10) return false;
   if (Date.now() - log.last < 30 * MIN) return false; // 还在聊，别打断
-  return Date.now() - lastTs > 20 * HOUR || log.count >= 150;
+  return Date.now() - lastTs > life.diaryHours * HOUR || log.count >= 150;
 }
 
 // ── 网名和签名 ──
@@ -129,38 +130,42 @@ export async function charPost(c) {
   return m;
 }
 
-// ── 主程序：一次补算 ──
-const inQuiet = (st) => { const hr = new Date().getHours(); return st.quietFrom <= st.quietTo ? hr >= st.quietFrom && hr < st.quietTo : hr >= st.quietFrom || hr < st.quietTo; };
+// ── 主程序：一次补算（每个角色按自己资料里「他的生活」那几项来）──
+const inQuiet = (L) => { const hr = new Date().getHours(); return L.quietFrom === L.quietTo ? false : L.quietFrom < L.quietTo ? hr >= L.quietFrom && hr < L.quietTo : hr >= L.quietFrom || hr < L.quietTo; };
 let running = false, lastAway = 0;
 export function tick() {
   if (running || !D.api().base) return;
   running = true;
   return queue(async () => {
-    const st = D.settings();
     try {
+      await getWeather().catch(() => {}); // 让角色知道的天气是新的（30 分钟内的用缓存）
       await momentJobs();
       const list = D.chars();
       // 网名签名还空着的，起一个
       for (const c of list) if (!c.profileTried && (!c.net || !c.sign) && c.name) { await makeProfile(c).catch((e) => { const f = D.charById(c.id); if (f) { f.profileTried = true; D.saveChar(f); } throw e; }); break; }
-      if (st.autoDiary) for (const c of list) if (diaryDue(c)) { await writeDiary(c).catch((e) => console.warn('日记', e.message)); break; }
-      if (st.charPosts) for (const c of list) {
+      for (const c of list) { const L = D.lifeOf(c); if (L.diary && diaryDue(c, L)) { await writeDiary(c).catch((e) => console.warn('日记', e.message)); break; } }
+      for (const c of list) {
+        const L = D.lifeOf(c);
+        if (!L.post) continue;
         const m = D.meta(c.id);
         const next = m.nextPost || ((c.createdAt || Date.now()) + rand(3, 12) * HOUR);
         if (!m.nextPost) D.setMeta(c.id, { nextPost: next });
-        if (Date.now() >= next && !inQuiet(st)) {
-          D.setMeta(c.id, { nextPost: Date.now() + rand(18, 48) * HOUR });
+        if (Date.now() >= next && !inQuiet(L)) {
+          D.setMeta(c.id, { nextPost: Date.now() + rand(0.7, 1.4) * L.postHours * HOUR });
           await charPost(c).catch((e) => console.warn('动态', e.message));
           break;
         }
       }
-      if (st.proactive && !inQuiet(st) && Date.now() - lastAway > 10 * MIN) {
+      if (Date.now() - lastAway > 10 * MIN) {
         const cands = list.filter((c) => {
+          const L = D.lifeOf(c);
+          if (!L.away || inQuiet(L)) return false;
           const ms = D.msgs(c.id), last = ms[ms.length - 1];
           if (!last) return false;
           const gap = Date.now() - last.ts;
           const m = D.meta(c.id);
           // 上一条已经是他主动发的、你还没回，就不再追着发
-          return gap > st.awayHours * HOUR && Date.now() - (m.lastAway || 0) > st.awayHours * HOUR && !(last.role === 'them' && last.away);
+          return gap > L.awayHours * HOUR && Date.now() - (m.lastAway || 0) > L.awayHours * HOUR && !(last.role === 'them' && last.away);
         });
         if (cands.length && Math.random() < 0.6) {
           const c = cands[Math.floor(Math.random() * cands.length)];

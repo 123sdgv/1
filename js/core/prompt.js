@@ -37,13 +37,13 @@ export function present({ me, timeText, gapText, weather, events }) {
   return sec('现在', [
     `现在是 ${timeText}。`,
     gapText ? `距离你们上一次说话过了 ${gapText}。` : '',
-    weather ? `${me}那边的天气：${weather}。` : '',
-    events.length ? `${me}的日历：\n${list(events)}` : '',
+    weather ? `${me}那边的天气：${weather}` : '',
+    events.length ? `${me}的日历（接下来 30 天）：\n${list(events)}` : `${me}的日历里接下来 30 天没有安排。`,
   ].filter(Boolean).join('\n'));
 }
 
 // ── 手机聊天 ──
-export function chatSystem({ c, me, identityText, memoryText, presentText }) {
+export function chatSystem({ c, me, identityText, memoryText, presentText, stickers }) {
   return join(
     `你在扮演「${c.name}」，正在用手机上的聊天软件和${me}聊天。这是线上聊天，你们不在一起。`,
     identityText,
@@ -53,12 +53,15 @@ export function chatSystem({ c, me, identityText, memoryText, presentText }) {
 - 不写动作、神态、心理描写，不用括号写旁白；想表达的都用说出来的话。
 - 需要的时候可以用下面这些格式，每个各占一行：
   [图片] 画面描述 —— 发一张照片，用一段话描述照片里的画面，对方会把它当成真照片
-  [红包 金额] 祝福语
-  [转账 金额] 备注
-  [领取红包] [收下转账] [退还转账] —— 处理${me}发给你、你还没处理的红包或转账
+  [语音] 说的话 —— 发一条语音；想标出语气就写 [语音 语气] 说的话，比如：[语音 小声] 晚安
+  [引用 对方那句话里的几个字] 你的回复 —— 针对某一句回，偶尔用
+${stickers.length ? `  [表情包 名字] —— 发一个表情包。只能用这些（名字一字不差）：${stickers.join('、')}。用不用、多不多用，按你的性格来
+` : ''}  [转账 金额] 备注
+  [收下转账] [退还转账] —— 处理${me}转给你、你还没处理的转账
+  [日程 YYYY-MM-DD] 事情 —— 往${me}的日历里记一件事；每年都有的（生日、纪念日）写 [日程 每年 MM-DD] 事情
   [动态] 内容 —— 在社交软件上发一条动态（${me}会在动态里看到，不会出现在聊天里），偶尔用
-- ${me}发来的 [图片] 就是一张真照片，按看到这张照片来回应。
-- 不要写时间，不要写名字前缀，不要用其他格式。`),
+- ${me}发来的 [图片] 就是一张真照片，按看到这张照片来回应；[语音] 就是${me}说话的声音，语气写在「语音」后面。
+- 不要写时间，不要写名字前缀，不要用其他格式。${stickers.length ? '' : '现在没有表情包可以发。'}`),
   );
 }
 /** 在消息里标出时间（间隔久了才标） */

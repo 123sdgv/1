@@ -1,5 +1,7 @@
-// 设置：API、角色的生活、锁屏密码和壁纸、备份
-import { h, Stack, page, group, row, inputRow, toggleRow, stepRow, note, toast, confirm, dialog, sheet, pickImage, download, menu } from '../../core/ui.js';
+// 设置：API、锁屏密码和壁纸（裁剪、模糊）、备份。角色的生活在每个角色的资料里设
+import { h, Stack, page, group, row, inputRow, stepRow, note, toast, confirm, dialog, sheet, download, menu } from '../../core/ui.js';
+import { pickCrop } from '../../core/crop.js';
+import { isLocked } from '../../phone/lock.js';
 import * as D from '../../core/data.js';
 import * as S from '../../core/store.js';
 import { testApi, listModels, endpoint } from '../../core/api.js';
@@ -11,17 +13,10 @@ export function mount(body, { close }) {
   pg.el.classList.add('set');
   const draw = () => {
     pg.scroll.querySelectorAll(':scope > :not(.bigttl)').forEach((x) => x.remove());
-    const a = D.api(), st = D.settings(), lk = D.lockConf();
+    const a = D.api(), lk = D.lockConf();
     pg.scroll.append(
       group('', row({ label: 'API', icon: 'key', value: a.base && a.model ? a.model : '还没填', onclick: apiPage })),
-      group('角色的生活',
-        toggleRow({ label: '很久没聊会来找你', sub: '打开手机时，离开久了他可能已经发来消息', value: st.proactive, onchange: (v) => D.setSettings({ proactive: v }) }),
-        stepRow({ label: '多久算久', value: st.awayHours, min: 1, max: 48, unit: ' 小时', onchange: (v) => D.setSettings({ awayHours: v }) }),
-        toggleRow({ label: '自己发动态', value: st.charPosts, onchange: (v) => D.setSettings({ charPosts: v }) }),
-        toggleRow({ label: '自动写日记', sub: '聊过一阵、停下来以后写', value: st.autoDiary, onchange: (v) => D.setSettings({ autoDiary: v }) }),
-        stepRow({ label: '安静时间从', value: st.quietFrom, min: 0, max: 23, unit: ' 点', onchange: (v) => D.setSettings({ quietFrom: v }) }),
-        stepRow({ label: '到', value: st.quietTo, min: 0, max: 23, unit: ' 点', onchange: (v) => D.setSettings({ quietTo: v }) })),
-      note('安静时间里他不会主动找你、不发动态。网页关着的时候什么都不会发生，下次打开时才补上。这些都会花 API 额度，嫌费就关掉。'),
+      note('多久来找你、发动态、写日记、几点别打扰，在每个角色的资料里单独设。'),
       group('锁屏与壁纸',
         row({ label: '锁屏密码', value: lk.pass ? '已设置' : '没有', onclick: passMenu }),
         row({ label: '锁屏壁纸', value: D.file('wallLock') ? '自己的图' : '默认', onclick: () => wallMenu('wallLock', '锁屏壁纸') }),
@@ -90,11 +85,35 @@ export function mount(body, { close }) {
     menu([['改密码', set], ['关掉密码', () => { D.setLock({ pass: '' }); toast('关掉了'); draw(); }, 'danger']], '锁屏密码');
   }
 
+  // 壁纸：选图 → 按屏幕比例裁 → 调模糊。换好以后还能单独再调模糊
   function wallMenu(k, title) {
+    const dev = document.getElementById('device');
+    const aspect = dev.clientWidth / dev.clientHeight;
     menu([
-      ['从相册选一张', async () => { const src = await pickImage({ max: 1600, quality: 0.85 }); if (src) { D.setFile(k, src); toast('换好了'); draw(); } }],
-      D.file(k) ? ['用默认的', () => { D.setFile(k, null); draw(); }] : null,
+      ['从相册选一张', async () => {
+        const r = await pickCrop({ aspect, width: Math.min(1290, Math.round(dev.clientWidth * 3)), blur: D.wallBlur(k), title, quality: 0.86 });
+        if (!r) return;
+        D.setFile(k, r.src); D.setWallBlur(k, r.blur); toast('换好了'); draw();
+      }],
+      D.file(k) ? ['调模糊', () => blurSheet(k, title)] : null,
+      D.file(k) ? ['用默认的', () => { D.setFile(k, null); D.setWallBlur(k, 0); draw(); }] : null,
     ], title);
+  }
+  function blurSheet(k, title) {
+    const before = D.wallBlur(k);
+    const val = h('b', { text: before + '' });
+    const range = h('input', { type: 'range', min: 0, max: 30, value: before, class: 'cr-range' });
+    // 拖的时候直接改壁纸。调的时候先让设置窗口让开（主屏幕）或者把锁屏露出来，看得到效果
+    const win = document.querySelector('.win'), lock = document.getElementById('lock');
+    range.addEventListener('input', () => { val.textContent = range.value; D.setWallBlur(k, +range.value); });
+    if (k === 'wallLock') { lock.hidden = false; lock.classList.remove('gone'); lock.classList.add('peek'); }
+    else win?.classList.add('peek');
+    sheet({ title: title + '模糊', cls: 'blur-sheet', body: h('div', { class: 'blur-row' }, range, val),
+      onClose: () => {
+        win?.classList.remove('peek');
+        if (k === 'wallLock') { lock.classList.add('gone'); lock.classList.remove('peek'); setTimeout(() => { if (!isLocked()) lock.hidden = true; }, 420); }
+        draw();
+      } });
   }
 
   async function exportData() {

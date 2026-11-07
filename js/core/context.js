@@ -46,20 +46,14 @@ export function memoryOf(c, recentText = '') {
   });
 }
 
+// 日历：今天的（打没打勾）+ 接下来 30 天的
 function eventsSoon() {
-  const today = ymd(), out = [];
-  const lim = Date.now() + 7 * 86400000;
-  for (const e of D.events()) {
-    let date = e.date;
-    if (e.yearly) {
-      const y = new Date().getFullYear();
-      date = `${y}${e.date.slice(4)}`;
-      if (date < today) date = `${y + 1}${e.date.slice(4)}`;
-    }
-    const t = new Date(date + 'T12:00:00').getTime();
-    if (date >= today && t <= lim) out.push([date, `${date === today ? '今天' : md(t)}：${e.title}${e.note ? '（' + e.note + '）' : ''}${e.yearly ? '（每年）' : ''}`]);
-  }
-  return out.sort((a, b) => (a[0] < b[0] ? -1 : 1)).map((x) => x[1]);
+  const t = D.today();
+  return D.upcoming(30).map(({ e, at, done }) => {
+    const when = at === t ? '今天' : md(new Date(at + 'T12:00:00').getTime());
+    const by = e.by && D.charById(e.by) ? `，${D.charById(e.by).name || D.nameOf(D.charById(e.by))}记的` : '';
+    return `${when}：${e.title}${e.note ? '（' + e.note + '）' : ''}${e.yearly ? '（每年）' : ''}${at === t ? (done ? '（已完成）' : '（还没完成）') : ''}${by}`;
+  });
 }
 
 export function presentOf(c, lastTs) {
@@ -105,6 +99,7 @@ export function buildChat(c, { extra = null, uptoId = null } = {}) {
   const prevTs = list.filter((r) => r.role !== 'note').slice(-2)[0]?.ts;
   const sys = T.chatSystem({
     c, me: meName(acc),
+    stickers: D.stickers().map((x) => x.name),
     identityText: identityOf(c),
     memoryText: memoryOf(c, lastUserText(list)),
     presentText: presentOf(c, prevTs),

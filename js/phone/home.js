@@ -157,6 +157,9 @@ function wireItem(el) {
     if (dragging) return;
     if (moved || long) return;
     if (editing) { if (key.startsWith('w:')) widgetConf(key); return; }
+    // 日程小组件上的小圆圈：打勾，不打开 App
+    const ck = e.target.closest?.('[data-ck]');
+    if (ck) { const [id, date] = ck.dataset.ck.split('|'); D.toggleDone(id, date); navigator.vibrate?.(6); return; }
     if (key.startsWith('app:')) openApp(key.slice(4));
     else { const w = layout.widgets[key], to = WIDGETS[w.type].open; if (to) openApp(to); }
   };

@@ -75,12 +75,21 @@
 .cal-legend { display: flex; justify-content: center; gap: 16px; font-size: 11.5px; color: var(--ink-3); padding: 6px 0 16px; border-bottom: 1px solid var(--line); }
 .cal-legend span { display: flex; align-items: center; gap: 5px; }
 .cal-soon-t { margin: 18px 18px 8px; font-size: 13px; color: var(--ink-2); }
-.cal-ev { width: calc(100% - 32px); margin: 0 16px 8px; display: flex; gap: 14px; align-items: center; padding: 12px 14px; border-radius: 14px; background: var(--bg); text-align: left; }
-.cal-ev-d { width: 48px; text-align: center; flex: none; }
-.cal-ev-d b { display: block; font-size: 22px; font-weight: 300; line-height: 1.1; }
-.cal-ev-d small { font-size: 11px; color: var(--ink-3); }
-.cal-ev > div:last-child b { display: block; font-size: 16px; font-weight: 500; }
-.cal-ev > div:last-child small { display: block; font-size: 12px; color: var(--ink-3); }
+/* 日程一行：圆圈打勾 + 事情 + 右边什么时候 */
+.ev-list { margin: 0 16px 10px; background: var(--bg); border-radius: 14px; overflow: hidden; }
+.sh-body .ev-list { background: var(--card); margin-bottom: 18px; }
+.ev-row { display: flex; align-items: center; position: relative; }
+.ev-row + .ev-row::before { content: ''; position: absolute; top: 0; left: 50px; right: 0; height: 1px; background: var(--line); }
+.ev-ck { flex: none; width: 50px; height: 54px; display: flex; align-items: center; justify-content: center; color: var(--ink); }
+.ev-ck .ic { width: 24px; height: 24px; }
+.ev-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 9px 14px 9px 0; text-align: left; }
+.ev-main span { flex: 1; min-width: 0; }
+.ev-main b { display: block; font-size: 16px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev-main small { display: block; font-size: 12px; color: var(--ink-3); }
+.ev-main small:empty { display: none; }
+.ev-main em { flex: none; font-style: normal; font-size: 13px; color: var(--ink-2); }
+.ev-row.done b { color: var(--ink-3); text-decoration: line-through; font-weight: 400; }
+.ev-row.done .ev-ck { color: var(--ink-3); }
 
 /* 相册 */
 .alb .scroll { background: var(--card); }
@@ -116,3 +125,11 @@
 
 /* 设置 */
 .api-res { margin-top: -12px; word-break: break-all; }
+
+/* 调壁纸模糊 */
+.blur-sheet { background: rgba(243,243,241,.94); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+.sheet-wrap:has(.blur-sheet) > .backdrop { background: transparent; }
+.blur-row { display: flex; align-items: center; gap: 14px; padding: 6px 22px 16px; }
+.blur-row b { width: 26px; text-align: right; font-weight: 500; }
+.blur-row .cr-range::-webkit-slider-runnable-track { background: #CFCFCB; }
+.blur-row .cr-range::-webkit-slider-thumb { box-shadow: 0 1px 5px rgba(0,0,0,.3), 0 0 0 .5px rgba(0,0,0,.1); }

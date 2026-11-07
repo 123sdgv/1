@@ -59,12 +59,12 @@ export function mount(body, { close, arg }) {
     p.el.classList.add('off-story');
     const list = h('div', { class: 'os-list' });
     p.scroll.append(h('div', { class: 'os-scene' }, avatar(c?.avatar, D.nameOf(c), 'sm'), h('p', { text: st.scene || `和 ${D.nameOf(c)} 见面` })), list);
-    const ta = h('textarea', { class: 'ch-in', rows: 1, placeholder: '你做什么、说什么…（空着点 ✦ 让他接着写）' });
+    const ta = h('textarea', { class: 'ch-in', rows: 1, placeholder: '你做什么、说什么…（空着发送就是让他接着写）' });
     const fit = autosize(ta, 140);
     const send = h('button', { class: 'ch-send' });
-    p.el.append(h('div', { class: 'ch-bar' }, ta, send));
+    p.el.append(h('div', { class: 'ch-foot' }, h('div', { class: 'ch-bar' }, ta, send)));
     const key = 'story:' + sid;
-    const drawSend = () => { const b = CS.busy(key), has = !!ta.value.trim(); send.className = 'ch-send' + (b ? ' stop' : has ? '' : ' spark'); send.innerHTML = icon(b ? 'stop' : has ? 'send' : 'spark'); };
+    const drawSend = () => { const b = CS.busy(key), has = !!ta.value.trim(); send.className = 'ch-send' + (b ? ' stop' : has ? ' go' : ''); send.innerHTML = icon(b ? 'stop' : 'send'); };
     ta.addEventListener('input', drawSend);
     send.addEventListener('pointerdown', (e) => e.preventDefault());
     send.onclick = () => {

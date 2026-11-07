@@ -1,0 +1,72 @@
+// 表情包：所有身份、所有角色共用的一套图。每张配一句说明（这张是什么意思），角色按说明挑着用。
+import { h, sheet, menu, ask, confirm, toast, longPress, icon } from '../../core/ui.js';
+import * as D from '../../core/data.js';
+
+/** 表情包面板：点一张就是选它；最后一格是添加；长按改说明、删除 */
+export function stickerSheet(onPick) {
+  const grid = h('div', { class: 'stk-grid' });
+  const s = sheet({ title: '表情包', body: h('div', {}, grid, h('p', { class: 'grp-note stk-note', text: '所有角色共用。说明写清楚这张是什么意思，他们会按说明挑着用（用不用看性格）。长按一张可以改说明或删掉。' })) });
+  const draw = () => {
+    grid.innerHTML = '';
+    for (const st of D.stickers()) {
+      const b = h('button', { class: 'stk-it', onclick: () => { s.close(); onPick(st); } }, h('img', { src: st.src, alt: st.name, draggable: 'false' }), h('small', { text: st.name }));
+      longPress(b, () => menu([
+        ['改说明', async () => {
+          const v = await ask('这张是什么意思', st.name, '比如：小猫探头、无语、摸摸头');
+          if (!v?.trim()) return;
+          D.setStickers(D.stickers().map((x) => (x.id === st.id ? { ...x, name: v.trim() } : x)));
+          draw();
+        }],
+        ['删掉', async () => { if (await confirm('删掉这张表情？', '聊天记录里发过的会只剩说明文字。', '删掉', true)) { D.setStickers(D.stickers().filter((x) => x.id !== st.id)); draw(); } }, 'danger'],
+      ], st.name));
+      grid.append(b);
+    }
+    grid.append(h('button', { class: 'stk-it add', onclick: () => addStickers(draw) }, h('span', { html: icon('plus') }), h('small', { text: '添加' })));
+  };
+  draw();
+  return s;
+}
+
+// 选几张图 → 给每张写说明 → 存
+function addStickers(after) {
+  const inp = h('input', { type: 'file', accept: 'image/*', multiple: true, style: { display: 'none' } });
+  document.body.append(inp);
+  inp.addEventListener('change', async () => {
+    const files = [...(inp.files || [])];
+    inp.remove();
+    if (!files.length) return;
+    const items = [];
+    for (const f of files.slice(0, 30)) { try { items.push({ src: await stickerSrc(f), name: '' }); } catch { toast('有一张读不出来，跳过了'); } }
+    if (!items.length) return;
+    const list = h('div', { class: 'stk-new' });
+    for (const it of items) {
+      const nm = h('input', { class: 'dlg-in', placeholder: '这张是什么意思', autocomplete: 'off' });
+      nm.addEventListener('input', () => { it.name = nm.value.trim(); });
+      list.append(h('label', { class: 'stk-new-it' }, h('img', { src: it.src, alt: '' }), nm));
+    }
+    const s = sheet({ title: items.length > 1 ? `给这 ${items.length} 张写说明` : '给这张写说明', full: items.length > 3, body: h('div', {}, list,
+      h('button', { class: 'btn wide', text: '存好', onclick: () => {
+        document.activeElement?.blur();
+        if (items.some((x) => !x.name)) { toast('每张都写一下是什么意思'); return; }
+        D.setStickers([...D.stickers(), ...items.map((x) => ({ id: D.uid(), name: x.name, src: x.src }))]);
+        s.close();
+        toast('存好了');
+        after?.();
+      } })) });
+    setTimeout(() => list.querySelector('input')?.focus(), 350);
+  });
+  inp.click();
+}
+
+// 动图小于 1.2MB 原样存（保住动画）；其他的缩到 320px，带透明的存 PNG
+async function stickerSrc(file) {
+  if (file.type === 'image/gif' && file.size < 1.2e6) return await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = bad; r.readAsDataURL(file); });
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    const k = Math.min(1, 320 / Math.max(img.naturalWidth, img.naturalHeight));
+    const cv = h('canvas', { width: Math.round(img.naturalWidth * k), height: Math.round(img.naturalHeight * k) });
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    return /png|webp|gif/.test(file.type) ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg', 0.9);
+  } finally { URL.revokeObjectURL(url); }
+}

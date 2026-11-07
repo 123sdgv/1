@@ -1,6 +1,6 @@
 // 小组件：每种一个 render(el, size, conf)。尺寸 s=2×2 格，m=4×2 格，l=4×4 格。
 // 加一种 = 在 WIDGETS 里加一项（name、sizes、render、点了打开哪个 App）
-import { h, avatar } from '../core/ui.js';
+import { h, avatar, icon } from '../core/ui.js';
 import * as D from '../core/data.js';
 import { hm, md, weekday, ymd, short } from '../core/time.js';
 import { cached, describe, wxIcon, getWeather } from '../core/weather.js';
@@ -44,16 +44,18 @@ function weather(el, size) {
   el.append(box);
 }
 
-function nextEvents(n) {
-  const today = ymd(), out = [];
-  for (const e of D.events()) {
-    let date = e.date;
-    if (e.yearly) { const y = new Date().getFullYear(); date = `${y}${e.date.slice(4)}`; if (date < today) date = `${y + 1}${e.date.slice(4)}`; }
-    if (date >= today) out.push({ ...e, at: date });
-  }
-  return out.sort((a, b) => (a.at < b.at ? -1 : 1)).slice(0, n);
-}
+// 日程：今天的（没打勾的在前）+ 往后的。每件前面一个小圆圈，点一下打勾（data-ck 由 home.js 处理）
 const daysTo = (date) => Math.round((new Date(date + 'T00:00:00') - new Date(ymd() + 'T00:00:00')) / 86400000);
+const agenda = (n) => D.upcoming(60).slice(0, n);
+const whenText = (at) => { const n = daysTo(at); return n === 0 ? '今天' : n === 1 ? '明天' : n === 2 ? '后天' : n + ' 天后'; };
+function agendaEl(items, size) {
+  if (!items.length) return h('div', { class: 'wg-ag none', text: '没有日程' });
+  return h('div', { class: 'wg-ag ' + size }, items.map(({ e, at, done }) =>
+    h('div', { class: 'wg-ag-it' + (done ? ' done' : '') },
+      h('button', { class: 'wg-ck', 'data-ck': `${e.id}|${at}`, 'aria-label': done ? '取消完成' : '完成', html: icon(done ? 'ringck' : 'ring') }),
+      h('span', { class: 'wg-ag-t', text: e.title }),
+      size !== 's' ? h('em', { text: whenText(at) }) : null)));
+}
 
 function calendar(el, size) {
   const d = new Date();
@@ -62,21 +64,18 @@ function calendar(el, size) {
     for (const w of '日一二三四五六') grid.append(h('i', { text: w }));
     const first = new Date(d.getFullYear(), d.getMonth(), 1).getDay();
     const days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-    const marks = new Set(nextEvents(50).map((e) => e.at));
+    const marks = new Set(D.upcoming(40).map((x) => x.at));
     for (let i = 0; i < first; i++) grid.append(h('span'));
     for (let i = 1; i <= days; i++) {
       const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(i)}`;
       grid.append(h('span', { class: (i === d.getDate() ? 'on' : '') + (marks.has(key) ? ' dot' : ''), text: i }));
     }
-    el.append(h('div', { class: 'wg-cal l' }, h('b', { text: `${d.getMonth() + 1}月` }), grid));
+    const rows = Math.ceil((first + days) / 7);
+    el.append(h('div', { class: 'wg-cal l' }, h('b', { text: `${d.getMonth() + 1}月` }), grid, agendaEl(agenda(rows > 5 ? 2 : 3), 'l')));
     return;
   }
-  const evs = nextEvents(size === 's' ? 1 : 3);
   const head = h('div', { class: 'wg-cal-h' }, h('small', { text: weekday(d) }), h('b', { text: d.getDate() }));
-  const list = h('div', { class: 'wg-cal-ev' }, evs.length
-    ? evs.map((e) => { const n = daysTo(e.at); return h('div', {}, h('span', { text: e.title }), h('em', { text: n ? `${n} 天后` : '今天' })); })
-    : h('div', { class: 'none', text: '没有日程' }));
-  el.append(h('div', { class: 'wg-cal ' + size }, head, list));
+  el.append(h('div', { class: 'wg-cal ' + size }, head, agendaEl(agenda(size === 's' ? 2 : 4), size)));
 }
 
 function latestMsg(conf) {
