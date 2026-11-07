@@ -1,0 +1,118 @@
+/* 其他 App：线下、日记、备忘录、日历、相册、天气、设置，和共用的照片、选人列表 */
+
+/* 共用：照片格子、看照片、选人 */
+.ph-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 0 4px 10px; }
+.ph-grid .ph { aspect-ratio: 1; border-radius: 3px; }
+.ph-grid .ph-txt { font-size: 11px; -webkit-line-clamp: 6; padding: 7px 8px; }
+.ph-view { padding: 0 16px 20px; }
+.ph.big { border-radius: 10px; min-height: 260px; display: flex; align-items: center; }
+.ph-meta { margin-top: 10px; font-size: 12.5px; color: var(--ink-3); text-align: center; }
+.pick-list { padding: 0 14px; }
+.pick-it { width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px; background: #fff; margin-bottom: 6px; text-align: left; font-size: 16px; }
+.pick-it b { display: block; font-weight: 500; }
+.pick-it small { display: block; font-size: 12px; color: var(--ink-3); }
+.ibtn.busy { animation: dot 1s infinite; }
+.danger-t { color: var(--danger) !important; }
+
+/* 线下 */
+.off-list, .dl-list { padding: 0 16px; display: flex; flex-direction: column; gap: 10px; }
+.off-it, .dl-it { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: 16px; background: var(--card); text-align: left; }
+.off-it > div, .dl-it > div { flex: 1; min-width: 0; }
+.off-it b, .dl-it b { display: block; font-size: 16px; font-weight: 600; }
+.off-it small, .dl-it small { display: block; font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+.off-it p { margin-top: 6px; font: 13.5px/1.6 var(--serif); color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dl-it { align-items: center; }
+.off-story { background: #F7F6F2; }
+.os-scene { display: flex; gap: 10px; align-items: flex-start; margin: 14px 18px 6px; padding: 12px 14px; border-radius: 12px; background: rgba(0,0,0,.04); font-size: 13px; color: var(--ink-2); line-height: 1.6; }
+.os-list { padding: 4px 0 10px; }
+.os-it { padding: 8px 22px; }
+.os-text .p { font: 16.5px/1.95 var(--serif); margin: 0 0 12px; text-indent: 2em; -webkit-user-select: text; user-select: text; }
+.os-it.me { display: flex; justify-content: flex-end; }
+.os-me { max-width: 82%; padding: 9px 13px; border-radius: 12px 12px 3px 12px; background: var(--ink); color: #fff; font-size: 15px; line-height: 1.6; white-space: pre-wrap; }
+.os-it .ch-ctl { margin-left: 0; }
+.os-it .ch-err { margin: 4px 0; }
+
+/* 日记 */
+.dy { background: #F5F4F0; }
+.dy-it { margin: 0 16px 18px; padding: 18px 18px 16px; background: #FDFCF8; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.dy-it header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #ECEAE3; }
+.dy-it header b { font: 600 19px var(--serif); }
+.dy-it header small { font-size: 12px; color: var(--ink-3); }
+.dy-text .p { font: 15.5px/2 var(--serif); margin: 0 0 8px; -webkit-user-select: text; user-select: text; }
+.dy-inner { margin-top: 12px; padding: 12px 14px; background: #F1EFE8; border-radius: 6px; }
+.dy-inner small { display: block; font-size: 11px; letter-spacing: .2em; color: var(--ink-3); margin-bottom: 4px; }
+.dy-inner .p { font: italic 14.5px/1.9 var(--serif); color: #3d3d3a; margin: 0; }
+.dy-keys { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
+.dy-keys span { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #EEECE5; color: var(--ink-2); }
+
+/* 备忘录 */
+.mm { background: #F6F6F3; }
+.mm-head { margin: 10px 18px 14px; }
+.mm-head b { display: block; font-size: 18px; }
+.mm-head small { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 4px; line-height: 1.6; }
+.mm-list { margin: 0 16px; background: #fff; border-radius: 14px; overflow: hidden; }
+.mm-it { width: 100%; display: grid; grid-template-columns: 26px 1fr; gap: 0 8px; padding: 12px 14px; text-align: left; border-top: 1px solid var(--line); }
+.mm-it:first-child { border-top: 0; }
+.mm-n { grid-row: span 2; font-size: 13px; color: var(--ink-3); padding-top: 2px; }
+.mm-it p { font-size: 15.5px; line-height: 1.55; }
+.mm-it small { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+
+/* 日历 */
+.cal .scroll { background: var(--card); }
+.cal-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px 4px; }
+.cal-head b { font-size: 20px; font-weight: 600; }
+.cal-head .ibtn { font-size: 26px; font-weight: 300; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); padding: 0 8px; text-align: center; }
+.cal-grid > i { font-style: normal; font-size: 12px; color: var(--ink-3); padding: 6px 0; }
+.cal-d { height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 12px; }
+.cal-d b { width: 32px; height: 32px; line-height: 32px; border-radius: 50%; font-size: 17px; font-weight: 400; }
+.cal-d.today b { background: var(--ink); color: #fff; font-weight: 600; }
+.cal-d:active { background: var(--soft); }
+.cal-marks { display: flex; gap: 3px; height: 5px; }
+.cal-marks i, .cal-legend i { width: 5px; height: 5px; border-radius: 50%; }
+.cal-marks .e, .cal-legend .e { background: var(--ink); }
+.cal-marks .d, .cal-legend .d { box-shadow: inset 0 0 0 1.2px var(--ink-2); }
+.cal-legend { display: flex; justify-content: center; gap: 16px; font-size: 11.5px; color: var(--ink-3); padding: 6px 0 16px; border-bottom: 1px solid var(--line); }
+.cal-legend span { display: flex; align-items: center; gap: 5px; }
+.cal-soon-t { margin: 18px 18px 8px; font-size: 13px; color: var(--ink-2); }
+.cal-ev { width: calc(100% - 32px); margin: 0 16px 8px; display: flex; gap: 14px; align-items: center; padding: 12px 14px; border-radius: 14px; background: var(--bg); text-align: left; }
+.cal-ev-d { width: 48px; text-align: center; flex: none; }
+.cal-ev-d b { display: block; font-size: 22px; font-weight: 300; line-height: 1.1; }
+.cal-ev-d small { font-size: 11px; color: var(--ink-3); }
+.cal-ev > div:last-child b { display: block; font-size: 16px; font-weight: 500; }
+.cal-ev > div:last-child small { display: block; font-size: 12px; color: var(--ink-3); }
+
+/* 相册 */
+.alb .scroll { background: var(--card); }
+.alb-f { display: flex; gap: 6px; overflow-x: auto; padding: 0 16px 10px; scrollbar-width: none; }
+.alb-day { margin: 10px 18px 6px; font-size: 13px; font-weight: 600; }
+
+/* 天气 */
+.wx .scroll { background: linear-gradient(180deg, #EDEDEB, var(--bg) 340px); }
+.wx-now { text-align: center; padding: 14px 20px 22px; }
+.wx-now > small { font-size: 17px; font-weight: 500; }
+.wx-big { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 6px 0; }
+.wx-big b { font-size: 84px; font-weight: 200; line-height: 1; }
+.wx-now > p { font-size: 15px; color: var(--ink-2); }
+.wx-facts { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 20px; background: var(--card); border-radius: 16px; padding: 12px 6px; }
+.wx-facts small { display: block; font-size: 11.5px; color: var(--ink-3); }
+.wx-facts b { font-size: 15px; font-weight: 500; }
+.wx-card { margin: 0 16px 14px; background: var(--card); border-radius: 16px; padding: 12px 14px; }
+.wx-card-t { font-size: 12.5px; color: var(--ink-3); margin-bottom: 8px; }
+.wx-hours { display: flex; gap: 16px; overflow-x: auto; scrollbar-width: none; text-align: center; padding-bottom: 2px; }
+.wx-hours > div { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.wx-hours small { font-size: 12px; color: var(--ink-2); }
+.wx-hours b { font-size: 15px; font-weight: 500; }
+.wx-day { display: grid; grid-template-columns: 44px 30px 1fr auto; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.wx-day:first-child { border-top: 0; }
+.wx-day b { font-size: 15px; font-weight: 500; }
+.wx-day small { font-size: 13px; color: var(--ink-2); }
+.wx-day em { font-style: normal; font-size: 14px; }
+.wx-src { text-align: center; font-size: 12px; color: var(--ink-3); margin: 6px 0 14px; }
+.wx-src a { color: var(--ink-2); }
+.wx-search { display: flex; gap: 8px; padding: 0 16px 12px; }
+.wx-search .dlg-in { margin: 0; flex: 1; font-size: 16px; }
+.wx-search .btn { height: 42px; }
+
+/* 设置 */
+.api-res { margin-top: -12px; word-break: break-all; }
