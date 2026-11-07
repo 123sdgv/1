@@ -13,7 +13,7 @@ export function mount(body, { close }) {
     const w = D.weatherConf();
     pg.scroll.innerHTML = '';
     if (!w) {
-      pg.scroll.append(h('div', { class: 'empty' }, h('b', { text: '还没选城市' }), '选好以后，主屏幕的小组件和角色都会知道你那边的天气。'), h('button', { class: 'btn wide', text: '选城市', onclick: () => pickCity() }));
+      pg.scroll.append(h('div', { class: 'empty' }, h('b', { text: '还没选城市' })), h('button', { class: 'btn wide', text: '选城市', onclick: () => pickCity() }));
       return;
     }
     let d = w.cache?.data;
@@ -57,7 +57,7 @@ export function mount(body, { close }) {
   }
 
   function pickCity() {
-    const inp = h('input', { class: 'dlg-in', placeholder: '城市名，比如：上海、London', type: 'search' });
+    const inp = h('input', { class: 'dlg-in', type: 'search' });
     const res = h('div', { class: 'pick-list' });
     const s = sheet({ title: '选城市', full: true, body: h('div', {},
       h('div', { class: 'wx-search' }, inp, h('button', { class: 'btn', text: '搜', onclick: go })),
@@ -72,7 +72,7 @@ export function mount(body, { close }) {
       try {
         const list = await searchCity(q);
         res.innerHTML = '';
-        if (!list.length) res.append(h('div', { class: 'empty', text: '没找到，换个写法试试' }));
+        if (!list.length) res.append(h('div', { class: 'empty', text: '没找到' }));
         for (const c of list) res.append(h('button', { class: 'pick-it', onclick: () => choose(c) }, h('span', {}, h('b', { text: c.name }), h('small', { text: c.region }))));
       } catch { res.innerHTML = ''; res.append(h('div', { class: 'empty', text: '查不到，检查一下网络' })); }
     }

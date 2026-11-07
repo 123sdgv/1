@@ -164,3 +164,5 @@
 .banner p { font-size: 13.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .banner-ic { width: 34px; height: 34px; border-radius: 9px; overflow: hidden; flex: none; }
 .banner-ic svg { width: 100%; height: 100%; }
+.lk-mail { width: 34px; height: 34px; border-radius: 9px; overflow: hidden; flex: none; }
+.lk-mail svg { width: 100%; height: 100%; }

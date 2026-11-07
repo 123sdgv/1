@@ -1,4 +1,4 @@
-// 角色不在你眼前时的生活：写日记、回动态、发动态、很久没聊来找你、给自己起网名。
+// 角色不在你眼前时的生活：写日记、回动态、发动态、很久没聊来找你、邮件（在 mail.js）。
 // 网页关掉就什么都不跑，所以每次打开（和开着的时候每隔一会儿）按时间补算。
 import * as D from './data.js';
 import { chat, queue } from './api.js';
@@ -7,10 +7,12 @@ import { parseJSON } from './parse.js';
 import { reply as charReply } from './chat.js';
 import { ymd } from './time.js';
 import { getWeather } from './weather.js';
+import { mailTick } from './mail.js';
 
 const MIN = 60000, HOUR = 60 * MIN;
 const rand = (a, b) => a + Math.random() * (b - a);
-const ask = (msgs, max = 900) => chat(msgs, { stream: false, max_tokens: max, temperature: 0.9 });
+// 后台的事也按这个角色自己的温度来
+const ask = (msgs, max = 900, c = null) => chat(msgs, { stream: false, max_tokens: max, temperature: c ? D.genOf(c).temperature : 0.9 });
 
 // ── 动态：安排谁什么时候来点赞评论 ──
 /** 你发了动态：这个账号的角色大多会来看看 */
@@ -38,7 +40,7 @@ async function runJob(m, job) {
   const c = D.charById(job.who);
   if (!c) return;
   if (job.kind === 'react') {
-    const j = parseJSON(await ask(C.buildReact(c, m), 400)) || {};
+    const j = parseJSON(await ask(C.buildReact(c, m), 400, c)) || {};
     const fresh = D.moments().find((x) => x.id === m.id);
     if (!fresh) return;
     if (j.like && !fresh.likes.includes(c.id)) fresh.likes.push(c.id);
@@ -54,7 +56,7 @@ async function runJob(m, job) {
     const fresh = D.moments().find((x) => x.id === m.id);
     const cm = fresh?.comments.find((x) => x.id === job.cid);
     if (!cm) return;
-    const j = parseJSON(await ask(C.buildReply(c, fresh, cm), 400)) || {};
+    const j = parseJSON(await ask(C.buildReply(c, fresh, cm), 400, c)) || {};
     if (j.reply && String(j.reply).trim()) {
       fresh.comments.push({ id: D.uid(), who: c.id, to: cm.who, text: String(j.reply).trim(), ts: Date.now() });
       if (cm.who === 'me') D.emit('notify', { moment: fresh.id, text: `${D.nameOf(c)}回复了你` });
@@ -85,7 +87,7 @@ export async function writeDiary(c, { force = false } = {}) {
   const since = ds.length ? ds[ds.length - 1].upto || ds[ds.length - 1].ts : 0;
   const log = C.diaryLog(c, since);
   if (!log.count) { if (force) throw new Error('上一篇日记之后还没发生什么'); return null; }
-  const j = parseJSON(await ask(C.buildDiary(c, log), 2000));
+  const j = parseJSON(await ask(C.buildDiary(c, log), 2000, c));
   if (!j || !j.diary) throw new Error('这次日记没写成，过会儿再试');
   const d = { id: D.uid(), date: /^\d{4}-\d{2}-\d{2}$/.test(j.date || '') ? j.date : ymd(log.last), ts: Date.now(), upto: log.last, text: String(j.diary).trim(), inner: String(j.inner || '').trim(), keys: (j.keywords || []).map(String).filter(Boolean).slice(0, 12) };
   D.setDiaries(c.id, [...D.diaries(c.id), d]);
@@ -107,22 +109,9 @@ function diaryDue(c, life) {
   return Date.now() - lastTs > life.diaryHours * HOUR || log.count >= 150;
 }
 
-// ── 网名和签名 ──
-export async function makeProfile(c) {
-  const j = parseJSON(await ask(C.buildProfile(c), 300));
-  if (!j) throw new Error('没起好，再试一次');
-  const fresh = D.charById(c.id);
-  if (!fresh) return null;
-  fresh.net = String(j.net || fresh.net || '').trim().slice(0, 24);
-  fresh.sign = String(j.sign || fresh.sign || '').trim().slice(0, 60);
-  fresh.profileTried = true;
-  D.saveChar(fresh);
-  return fresh;
-}
-
 // ── 角色发动态 ──
 export async function charPost(c) {
-  const j = parseJSON(await ask(C.buildPost(c), 600));
+  const j = parseJSON(await ask(C.buildPost(c), 600, c));
   if (!j || !String(j.text || '').trim()) return null;
   const m = D.saveMoment({ id: D.uid(), acc: c.acc, who: c.id, text: String(j.text).trim(), photos: (j.photos || []).map(String).filter(Boolean).slice(0, 9), ts: Date.now(), likes: [], comments: [], jobs: [] });
   for (const p of m.photos) D.addPhoto({ acc: c.acc, desc: p, who: c.id });
@@ -131,7 +120,7 @@ export async function charPost(c) {
 }
 
 // ── 主程序：一次补算（每个角色按自己资料里「他的生活」那几项来）──
-const inQuiet = (L) => { const hr = new Date().getHours(); return L.quietFrom === L.quietTo ? false : L.quietFrom < L.quietTo ? hr >= L.quietFrom && hr < L.quietTo : hr >= L.quietFrom || hr < L.quietTo; };
+export const inQuiet = (L) => { if (L.quiet === false) return false; const hr = new Date().getHours(); return L.quietFrom === L.quietTo ? false : L.quietFrom < L.quietTo ? hr >= L.quietFrom && hr < L.quietTo : hr >= L.quietFrom || hr < L.quietTo; };
 let running = false, lastAway = 0;
 export function tick() {
   if (running || !D.api().base) return;
@@ -141,8 +130,7 @@ export function tick() {
       await getWeather().catch(() => {}); // 让角色知道的天气是新的（30 分钟内的用缓存）
       await momentJobs();
       const list = D.chars();
-      // 网名签名还空着的，起一个
-      for (const c of list) if (!c.profileTried && (!c.net || !c.sign) && c.name) { await makeProfile(c).catch((e) => { const f = D.charById(c.id); if (f) { f.profileTried = true; D.saveChar(f); } throw e; }); break; }
+      await mailTick({ inQuiet });
       for (const c of list) { const L = D.lifeOf(c); if (L.diary && diaryDue(c, L)) { await writeDiary(c).catch((e) => console.warn('日记', e.message)); break; } }
       for (const c of list) {
         const L = D.lifeOf(c);

@@ -1,5 +1,5 @@
-// 设置：API、锁屏密码和壁纸（裁剪、模糊）、备份。角色的生活在每个角色的资料里设
-import { h, Stack, page, group, row, inputRow, stepRow, note, toast, confirm, dialog, sheet, download, menu } from '../../core/ui.js';
+// 设置：API、锁屏密码和壁纸（裁剪、模糊）、备份。温度、Token、上下文和他的生活都在每个角色的资料里设
+import { h, Stack, page, group, row, inputRow, toast, confirm, dialog, sheet, download, menu } from '../../core/ui.js';
 import { pickCrop } from '../../core/crop.js';
 import { isLocked } from '../../phone/lock.js';
 import * as D from '../../core/data.js';
@@ -15,8 +15,7 @@ export function mount(body, { close }) {
     pg.scroll.querySelectorAll(':scope > :not(.bigttl)').forEach((x) => x.remove());
     const a = D.api(), lk = D.lockConf();
     pg.scroll.append(
-      group('', row({ label: 'API', icon: 'key', value: a.base && a.model ? a.model : '还没填', onclick: apiPage })),
-      note('多久来找你、发动态、写日记、几点别打扰，在每个角色的资料里单独设。'),
+      group('', row({ label: 'API', icon: 'key', value: a.base && a.model ? a.model : '', onclick: apiPage })),
       group('锁屏与壁纸',
         row({ label: '锁屏密码', value: lk.pass ? '已设置' : '没有', onclick: passMenu }),
         row({ label: '锁屏壁纸', value: D.file('wallLock') ? '自己的图' : '默认', onclick: () => wallMenu('wallLock', '锁屏壁纸') }),
@@ -25,22 +24,20 @@ export function mount(body, { close }) {
         row({ label: '导出备份', icon: 'down', onclick: exportData }),
         row({ label: '导入备份', icon: 'up', onclick: importData }),
         row({ label: '抹掉所有内容', cls: 'danger', chev: false, onclick: wipe })),
-      note('所有东西都只存在这台设备的浏览器里，清理浏览器数据会丢，记得时不时导出。导出的文件不含 API Key。'),
     );
   };
 
   function apiPage() {
     const a = D.api();
     const v = { base: a.base, key: a.key, model: a.model };
-    const st = D.settings();
     const p = page({ title: 'API', onBack: () => { stack.pop(); draw(); } });
-    const modelRow = inputRow({ label: '模型', value: v.model, placeholder: '比如 gpt-4o-mini', onchange: (x) => { v.model = x.trim(); save(); } });
+    const modelRow = inputRow({ label: '模型', value: v.model, onchange: (x) => { v.model = x.trim(); save(); } });
     const result = h('p', { class: 'grp-note api-res' });
     const save = () => D.setApi(v);
     p.scroll.append(
       group('接口（OpenAI 兼容）',
-        inputRow({ label: '地址', value: v.base, placeholder: 'https://…/v1', onchange: (x) => { v.base = x.trim(); save(); hint(); } }),
-        inputRow({ label: 'Key', value: v.key, placeholder: 'sk-…', type: 'password', onchange: (x) => { v.key = x.trim(); save(); } }),
+        inputRow({ label: '地址', value: v.base, onchange: (x) => { v.base = x.trim(); save(); hint(); } }),
+        inputRow({ label: 'Key', value: v.key, type: 'password', onchange: (x) => { v.key = x.trim(); save(); } }),
         modelRow,
         row({ label: '从这家拉模型列表', onclick: async () => {
           try {
@@ -57,12 +54,7 @@ export function mount(body, { close }) {
         try { const r = await testApi(); result.textContent = `连上了（${r.ms} 毫秒），回了：${r.text || '（空）'}`; }
         catch (err) { result.textContent = '没连上：' + err.message; }
         finally { b.disabled = false; b.textContent = '测试连接'; }
-      } }),
-      group('生成',
-        stepRow({ label: '温度', value: st.temperature, min: 0, max: 2, step: 0.1, onchange: (x) => D.setSettings({ temperature: x }) }),
-        stepRow({ label: '最长回复', value: st.maxTokens, min: 200, max: 8000, step: 100, unit: ' tok', onchange: (x) => D.setSettings({ maxTokens: x }) }),
-        stepRow({ label: '带多少条聊天记录', value: st.histLen, min: 10, max: 200, step: 10, unit: ' 条', onchange: (x) => D.setSettings({ histLen: x }) })),
-      note('温度越高越随性。聊天记录带得越多越连贯，也越费额度；更早的事靠日记和备忘录记着。'));
+      } }));
     const hint = () => { const u = endpoint(v.base); result.textContent = u ? '实际请求：' + u : ''; };
     hint();
     stack.push({ el: p.el });
@@ -71,10 +63,10 @@ export function mount(body, { close }) {
   function passMenu() {
     const lk = D.lockConf();
     const set = async () => {
-      const a = await dialog({ title: '新密码', text: '4 到 6 位数字', input: { type: 'password', inputmode: 'numeric', placeholder: '••••' }, buttons: [['取消', false], ['下一步', true, 'main']] });
+      const a = await dialog({ title: '新密码', input: { type: 'password', inputmode: 'numeric' }, buttons: [['取消', false], ['下一步', true, 'main']] });
       if (a == null) return;
       if (!/^\d{4,6}$/.test(a)) { toast('要 4 到 6 位数字'); return; }
-      const b = await dialog({ title: '再输一遍', input: { type: 'password', inputmode: 'numeric', placeholder: '••••' }, buttons: [['取消', false], ['好', true, 'main']] });
+      const b = await dialog({ title: '再输一遍', input: { type: 'password', inputmode: 'numeric' }, buttons: [['取消', false], ['好', true, 'main']] });
       if (b == null) return;
       if (a !== b) { toast('两次不一样'); return; }
       D.setLock({ pass: a });

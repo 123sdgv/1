@@ -2,13 +2,14 @@
 // 聊天格式（每行一条消息）：
 //   普通文字
 //   [图片] 画面描述
-//   [语音] 说的话            [语音 语气] 说的话
+//   [语音] 说的话
 //   [引用 原话片段] 回复
 //   [表情包 名字]
 //   [转账 520] 备注
 //   [收下转账] [退还转账]                —— 处理你转给他的
 //   [日程 2026-11-20] 事情   [日程 每年 11-20] 事情   —— 往日历里记一件事
 //   [动态] 内容                          —— 他发一条动态（不出现在聊天里）
+//   [邮件 主题] 另起几行写正文，最后 [/邮件]   —— 他给你发一封邮件（不出现在聊天里）
 import { stickerByName } from './data.js';
 
 export const stripThink = (s) => String(s || '').replace(/<think>[\s\S]*?(<\/think>|$)/gi, '').replace(/^\s*<\/think>/i, '');
@@ -38,7 +39,7 @@ export function parseDate(s) {
 }
 
 const voiceSec = (text) => Math.max(1, Math.min(60, Math.round(String(text).length / 3.6)));
-export const makeVoice = (text, tone = '') => ({ t: 'voice', text, tone: tone || '', sec: voiceSec(text) });
+export const makeVoice = (text) => ({ t: 'voice', text, sec: voiceSec(text) });
 
 /** 一行 → 部件（或动作）。返回 null 表示这行不要 */
 export function parseLine(line) {
@@ -50,7 +51,8 @@ export function parseLine(line) {
   if (m) {
     const [, tag, arg, rest] = m.map((x) => (x || '').trim());
     if (/^(图片|照片|图)$/.test(tag)) return rest || arg ? { t: 'photo', desc: rest || arg } : null;
-    if (/^(语音|语音条)$/.test(tag)) return rest ? makeVoice(rest, arg) : arg ? makeVoice(arg) : null;
+    // 老格式 [语音 语气] 话：语气不要了，只留话
+    if (/^(语音|语音条)$/.test(tag)) return rest ? makeVoice(rest) : arg ? makeVoice(arg) : null;
     if (/^(表情包|表情|贴纸)$/.test(tag)) {
       const name = arg || rest;
       if (!name) return null;
@@ -72,19 +74,33 @@ export function parseLine(line) {
       return { t: 'text', text: s };
     }
     if (/^(动态|发动态|说说)$/.test(tag)) return rest || arg ? { act: 'post', text: rest || arg } : null;
+    if (/^(邮件|发邮件|写信|信)$/.test(tag)) return { act: 'mail', subject: arg.slice(0, 60), body: rest };
   }
+  if (MAIL_END.test(s)) return null;
   return { t: 'text', text: s };
 }
 
-/** 整段回复 → { parts, acts } */
+const MAIL_END = /^[\[【]\s*\/\s*(邮件|信)\s*[\]】]$/;
+/** 整段回复 → { parts, acts }。邮件可以跨好几行：[邮件 主题] 到 [/邮件] 之间都是正文，不变成气泡 */
 export function parseChat(text) {
   const parts = [], acts = [];
-  for (const line of stripThink(text).split('\n')) {
+  const lines = stripThink(text).split('\n');
+  let mail = null;
+  lines.forEach((line, i) => {
+    if (mail) {
+      if (MAIL_END.test(line.trim())) { acts.push(mail); mail = null; }
+      else mail.body += (mail.body ? '\n' : '') + line;
+      return;
+    }
     const p = parseLine(line);
-    if (!p) continue;
+    if (!p) return;
+    // 后面有 [/邮件]，或者这行只有标题（正文还在后面），就进入多行模式
+    if (p.act === 'mail' && (!p.body || lines.slice(i + 1).some((l) => MAIL_END.test(l.trim())))) { mail = p; return; }
     if (p.act) acts.push(p); else parts.push(p);
-  }
-  return { parts, acts };
+  });
+  if (mail) acts.push(mail);
+  for (const a of acts) if (a.act === 'mail') a.body = a.body.trim();
+  return { parts, acts: acts.filter((a) => a.act !== 'mail' || a.body) };
 }
 
 const yuan = (n) => (Math.round(n * 100) / 100).toFixed(2);
@@ -95,16 +111,19 @@ export function partText(p) {
   const q = p.quote ? `[引用 ${p.quote.text}] ` : '';
   switch (p.t) {
     case 'text': return q + p.text;
-    case 'voice': return q + `[语音${p.tone ? ' ' + p.tone : ''}] ${p.text}`;
+    case 'voice': return q + `[语音] ${p.text}`;
     case 'sticker': return `[表情包 ${p.name}]`;
     case 'photo': return `[图片] ${p.desc}`;
     case 'red':
     case 'pay': return `[转账 ${yuan(p.amount)}] ${p.note || ''}（${PAY_STATE[p.state] || ''}）`.replace('  ', ' ');
     case 'event': return `[日程 ${p.yearly ? '每年 ' + p.date.slice(5) : p.date}] ${p.title}`;
     case 'note': return `（${p.text}）`;
+    case 'fwd': return fwdText(p);
     default: return '';
   }
 }
+/** 转发的聊天记录写成文字（给模型看、写进动态） */
+export const fwdText = (f) => [`[聊天记录] ${f.title}`, ...(f.items || []).map((x) => `${x.name}：${x.text}`)].join('\n');
 
 /** 列表预览、通知、引用用的一句话 */
 export function partPreview(p) {
@@ -117,13 +136,18 @@ export function partPreview(p) {
     case 'pay': return '[转账]' + (p.note ? ' ' + p.note : '');
     case 'event': return '[日程] ' + p.title;
     case 'note': return p.text;
+    case 'fwd': return '[聊天记录] ' + p.title;
     default: return '';
   }
 }
+/** 搜索用：一个部件里所有的字 */
+export function partSearchText(p) {
+  return [p.text, p.desc, p.name, p.note, p.title, ...(p.items || []).map((x) => x.name + '：' + x.text)].filter(Boolean).join(' ');
+}
 /** 引用里显示的那句（照片带上画面） */
-export function quoteText(p) {
+export function quoteText(p, max = QUOTE_MAX) {
   const s = p.t === 'photo' ? '[图片] ' + p.desc : partPreview(p);
-  return s.length > QUOTE_MAX ? s.slice(0, QUOTE_MAX) + '…' : s;
+  return s.length > max ? s.slice(0, max) + '…' : s;
 }
 
 /** 从模型回复里抠出 JSON：去掉 ```json 包裹，取第一个 { 到最后一个 } */

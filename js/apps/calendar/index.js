@@ -1,6 +1,6 @@
-// 日历：你的日程和纪念日（整台手机共用）。前面的小圆圈点一下就是做完了。
-// 角色能看到接下来 30 天的，也能自己往里记（聊天里的 [日程]）。有日记的日子也标出来。
-import { h, Stack, page, btnIc, sheet, group, inputRow, toggleRow, areaRow, toast, confirm, icon } from '../../core/ui.js';
+// 日历：你的日程和纪念日（整台手机共用）。前面的小圆圈点一下就是做完了，往左滑露出红色删除。
+// 角色能看到接下来 30 天的，也能自己往里记（聊天里的 [日程]，他记的生日可以是每年的）。有日记的日子也标出来。
+import { h, Stack, page, btnIc, sheet, group, inputRow, areaRow, toast, icon, swipeRow } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { ymd } from '../../core/time.js';
 import { openApp } from '../../phone/window.js';
@@ -10,19 +10,20 @@ const key = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
 
 const eventsOn = D.eventsOn;
 const byName = (e) => (e.by && D.charById(e.by) ? D.nameOf(D.charById(e.by)) + ' 记的' : '');
-// 一件事一行：圆圈（打勾）+ 事情 + 小字 + 右边的时间
+// 一件事一行：圆圈（打勾）+ 事情 + 小字 + 右边的时间。往左滑露出删除
 function evRow(e, date, right, onOpen) {
   const done = D.isDone(e, date);
   const el = h('div', { class: 'ev-row' + (done ? ' done' : '') },
     h('button', { class: 'ev-ck', 'aria-label': done ? '取消完成' : '完成', html: icon(done ? 'ringck' : 'ring'), onclick: () => {
       D.toggleDone(e.id, date);
       navigator.vibrate?.(6);
-      el.replaceWith(evRow(D.events().find((x) => x.id === e.id) || e, date, right, onOpen));
+      wrap.replaceWith(evRow(D.events().find((x) => x.id === e.id) || e, date, right, onOpen));
     } }),
     h('button', { class: 'ev-main', onclick: onOpen },
       h('span', {}, h('b', { text: e.title }), h('small', { text: [e.yearly ? '每年' : '', e.note, byName(e)].filter(Boolean).join(' · ') })),
       right ? h('em', { text: right }) : null));
-  return el;
+  const wrap = swipeRow(el, () => D.setEvents(D.events().filter((x) => x.id !== e.id)));
+  return wrap;
 }
 function diariesOn(date) {
   const out = [];
@@ -52,7 +53,7 @@ export function mount(body, { close }) {
       grid.append(h('button', { class: 'cal-d' + (k === today ? ' today' : '') + (ev ? ' ev' : ''), onclick: () => day(k) },
         h('b', { text: d }), h('span', { class: 'cal-marks' }, ev ? h('i', { class: 'e' }) : null, dy ? h('i', { class: 'd' }) : null)));
     }
-    pg.scroll.append(head, grid, h('div', { class: 'cal-legend' }, h('span', {}, h('i', { class: 'e' }), '日程'), h('span', {}, h('i', { class: 'd' }), '有日记')));
+    pg.scroll.append(head, grid);
     // 今天和接下来的
     const soon = D.upcoming(400);
     if (soon.length) {
@@ -67,13 +68,18 @@ export function mount(body, { close }) {
   };
 
   function day(k) {
-    const evs = eventsOn(k), dys = diariesOn(k);
     const body = h('div', {});
-    const s = sheet({ title: k, body });
-    if (evs.length) body.append(h('div', { class: 'ev-list' }, evs.map((e) => evRow(e, k, '', () => { s.close(); edit(e); }))));
-    if (dys.length) body.append(group('这天的日记', ...dys.map(({ c, d }) => h('button', { class: 'row', onclick: () => { s.close(); openApp('diary', { char: c.id }); } }, h('span', { class: 'row-l' }, D.nameOf(c), h('small', { text: d.text.slice(0, 40) + '…' }))))));
-    if (!evs.length && !dys.length) body.append(h('div', { class: 'empty', text: '这天什么都没有' }));
-    body.append(h('button', { class: 'btn wide', text: '在这天加日程', onclick: () => { s.close(); edit(null, k); } }));
+    const fill = () => {
+      body.innerHTML = '';
+      const evs = eventsOn(k), dys = diariesOn(k);
+      if (evs.length) body.append(h('div', { class: 'ev-list' }, evs.map((e) => evRow(e, k, '', () => { s.close(); edit(e); }))));
+      if (dys.length) body.append(group('这天的日记', ...dys.map(({ c, d }) => h('button', { class: 'row', onclick: () => { s.close(); openApp('diary', { char: c.id }); } }, h('span', { class: 'row-l' }, D.nameOf(c), h('small', { text: d.text.slice(0, 40) + '…' }))))));
+      if (!evs.length && !dys.length) body.append(h('div', { class: 'empty', text: '这天什么都没有' }));
+      body.append(h('button', { class: 'btn wide', text: '在这天加日程', onclick: () => { s.close(); edit(null, k); } }));
+    };
+    const off = D.on('events', fill);
+    const s = sheet({ title: k, body, onClose: off });
+    fill();
   }
 
   function edit(e, date) {
@@ -82,10 +88,9 @@ export function mount(body, { close }) {
     const dateIn = h('input', { class: 'row-in', type: 'date', value: v.date });
     dateIn.addEventListener('change', () => { v.date = dateIn.value || v.date; });
     const s = sheet({ title: isNew ? '加日程' : '日程', body: h('div', {},
-      group('', inputRow({ label: '事情', value: v.title, placeholder: '比如：考试、他的生日', onchange: (x) => { v.title = x.trim(); } }),
-        h('label', { class: 'row' }, h('span', { class: 'row-l', text: '日期' }), dateIn),
-        toggleRow({ label: '每年都有', sub: '生日、纪念日', value: v.yearly, onchange: (x) => { v.yearly = x; } })),
-      group('备注', areaRow({ value: v.note, rows: 2, placeholder: '可以不写', onchange: (x) => { v.note = x.trim(); } })),
+      group('', inputRow({ label: '事情', value: v.title, onchange: (x) => { v.title = x.trim(); } }),
+        h('label', { class: 'row' }, h('span', { class: 'row-l', text: '日期' }), dateIn)),
+      group('备注', areaRow({ value: v.note, rows: 2, onchange: (x) => { v.note = x.trim(); } })),
       h('button', { class: 'btn wide', text: '保存', onclick: () => {
         document.activeElement?.blur();
         setTimeout(() => {
@@ -93,8 +98,7 @@ export function mount(body, { close }) {
           D.setEvents([...D.events().filter((x) => x.id !== v.id), v]);
           s.close();
         }, 30);
-      } }),
-      !isNew ? h('button', { class: 'btn wide ghost danger-t', text: '删除', onclick: async () => { if (await confirm('删除这个日程？', '', '删除', true)) { D.setEvents(D.events().filter((x) => x.id !== v.id)); s.close(); } } }) : null) });
+      } })) });
   }
 
   const offs = [D.on('events', draw), D.on('diary', draw), D.on('account', draw)];

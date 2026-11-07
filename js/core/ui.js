@@ -77,6 +77,14 @@ const P = {
   ring: '<circle cx="12" cy="12" r="8.4"/>',
   ringck: '<circle cx="12" cy="12" r="9" fill="currentColor" stroke="none"/><path d="m8 12.2 2.8 2.8L16.2 9.6" stroke="#fff" stroke-width="1.9"/>',
   right: '<path d="M9.4 6.4 15 12l-5.6 5.6"/>',
+  quote: '<path d="M5.7 14.4c0-3.4 1.7-5.7 4.7-7"/><circle cx="7.9" cy="14.6" r="2.3" fill="currentColor" stroke="none"/><path d="M13.9 14.4c0-3.4 1.7-5.7 4.7-7"/><circle cx="16.1" cy="14.6" r="2.3" fill="currentColor" stroke="none"/>',
+  multi: '<path d="m4.2 7.2 1.7 1.7 3-3M4.2 15.6l1.7 1.7 3-3"/><path d="M12 7.6h7.6M12 16h7.6"/>',
+  fwd: '<path d="M13.6 5.4 19.4 11l-5.8 5.6"/><path d="M19.2 11h-7.2a7 7 0 0 0-7 7v.8"/>',
+  reply: '<path d="M10.4 5.4 4.8 11l5.6 5.6"/><path d="M5 11h8.2a6 6 0 0 1 6 6v1"/>',
+  undo: '<path d="M8.6 5 4.6 9l4 4"/><path d="M4.8 9h9.6a5 5 0 0 1 0 10H9"/>',
+  inbox: '<path d="M4 13.4 6.6 5.8A1.6 1.6 0 0 1 8.1 4.8h7.8a1.6 1.6 0 0 1 1.5 1l2.6 7.6v4.6a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 18z"/><path d="M4 13.4h4.6l1.4 2.4h4l1.4-2.4H20"/>',
+  mail: '<rect x="3.6" y="5.6" width="16.8" height="12.8" rx="2.2"/><path d="m4.4 7 7.6 6 7.6-6"/>',
+  compose: '<path d="M11 5H6.6A1.6 1.6 0 0 0 5 6.6v10.8A1.6 1.6 0 0 0 6.6 19h10.8a1.6 1.6 0 0 0 1.6-1.6V13"/><path d="M10 14l.6-2.8 6.6-6.6a1.4 1.4 0 0 1 2 2l-6.6 6.6z"/>',
 };
 export const icon = (name, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 export const ic = (name, cls) => h('span', { class: 'ico', html: icon(name, cls) });
@@ -277,6 +285,84 @@ export function longPress(el, fn, ms = 480) {
   el.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
+// ── 长按冒出来的黑色小条：只有图标。items = [[图标, 回调, 读屏用的名字], ...]
+// 默认出在 anchor 上面；上面放不下就放下面；anchor 太高（长文）就跟着手指的位置
+export function popbar(anchor, items, point = null) {
+  const host = document.getElementById('sheets');
+  const dev = document.getElementById('device').getBoundingClientRect();
+  const r = anchor.getBoundingClientRect();
+  let wrap = null;
+  const close = () => { if (!wrap) return; const w = wrap; wrap = null; w.classList.remove('on'); anchor.classList.remove('pressed'); setTimeout(() => w.remove(), 160); };
+  const bar = h('div', { class: 'popbar' }, items.filter(Boolean).map(([ic, fn, label]) =>
+    h('button', { 'aria-label': label, html: icon(ic), onclick: (e) => { e.stopPropagation(); close(); fn(); } })));
+  const arrow = h('i', { class: 'pop-arr' });
+  bar.append(arrow);
+  const back = h('div', { class: 'pop-back' });
+  back.addEventListener('pointerdown', (e) => { e.preventDefault(); close(); });
+  wrap = h('div', { class: 'pop-wrap' }, back, bar);
+  host.append(wrap);
+  const bw = bar.offsetWidth, bh = bar.offsetHeight;
+  const hb = anchor.closest('.pg')?.querySelector(':scope > .bar')?.getBoundingClientRect();
+  const minTop = (hb ? hb.bottom - dev.top : 64) + 6;
+  const maxTop = dev.height - bh - 70;
+  const ax = (r.width < dev.width * 0.9 ? r.left + r.width / 2 : point?.x ?? r.left + r.width / 2) - dev.left;
+  let top = r.top - dev.top - bh - 10, mode = 'above';
+  if (top < minTop) {
+    if (r.bottom - dev.top + 10 <= maxTop) { top = r.bottom - dev.top + 10; mode = 'below'; }
+    else { top = Math.max(minTop, Math.min(maxTop, (point ? point.y - dev.top : minTop + bh) - bh - 18)); mode = 'point'; }
+  }
+  const left = Math.max(10, Math.min(dev.width - bw - 10, ax - bw / 2));
+  Object.assign(bar.style, { left: left + 'px', top: top + 'px' });
+  arrow.style.left = Math.max(14, Math.min(bw - 14, ax - left)) + 'px';
+  bar.classList.toggle('below', mode === 'below');
+  arrow.hidden = mode === 'point';
+  anchor.classList.add('pressed');
+  wrap.getBoundingClientRect();
+  wrap.classList.add('on');
+  return { close };
+}
+
+// ── 左滑露出红色删除：滑开不删，点红色那块才删。一次只开一行，点别处收回 ──
+let swOpen = null;
+document.addEventListener('pointerdown', (e) => { if (swOpen && !swOpen.wrap.contains(e.target)) swOpen.close(); }, true);
+export function swipeRow(front, onDelete, label = '删除') {
+  const W = 76;
+  const del = h('button', { class: 'sw-del', 'aria-label': label, html: icon('trash'), onclick: (e) => { e.stopPropagation(); close(); onDelete(); } });
+  front.classList.add('sw-front');
+  const wrap = h('div', { class: 'sw-wrap' }, del, front);
+  let id = null, x0 = 0, y0 = 0, base = 0, cur = 0, live = false, moved = false;
+  const set = (x, anim) => { cur = x; front.style.transition = anim ? 'transform .26s var(--ez)' : 'none'; front.style.transform = x ? `translate3d(${x}px,0,0)` : ''; del.style.opacity = x ? 1 : 0; };
+  const me = { wrap, close: () => close() };
+  function close() { set(0, true); if (swOpen === me) swOpen = null; }
+  front.addEventListener('pointerdown', (e) => { id = e.pointerId; x0 = e.clientX; y0 = e.clientY; base = cur; live = false; moved = false; });
+  front.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== id) return;
+    const mx = e.clientX - x0, my = e.clientY - y0;
+    if (!live) {
+      if (Math.abs(my) > 8 && Math.abs(my) > Math.abs(mx)) { id = null; return; }
+      if (Math.abs(mx) < 8) return;
+      live = moved = true;
+      try { front.setPointerCapture(id); } catch {}
+    }
+    set(Math.max(-W * 1.25, Math.min(0, base + mx)));
+  });
+  const end = (e) => {
+    if (e.pointerId !== id) return;
+    id = null;
+    if (!live) return;
+    live = false;
+    if (cur < -W / 2) { set(-W, true); swOpen = me; } else close();
+  };
+  front.addEventListener('pointerup', end);
+  front.addEventListener('pointercancel', end);
+  front.addEventListener('click', (e) => {
+    if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; return; }
+    if (cur) { e.stopPropagation(); e.preventDefault(); close(); }
+  }, true);
+  set(0);
+  return wrap;
+}
+
 // ── 表单：分组列表 ──
 export const group = (title, ...rows) => h('div', { class: 'grp' }, title ? h('div', { class: 'grp-t', text: title }) : null, h('div', { class: 'grp-b' }, rows));
 export const note = (text) => h('p', { class: 'grp-note', text });
@@ -311,6 +397,24 @@ export function stepRow({ label, value, min, max, step = 1, unit = '', onchange 
   const set = (n) => { v = Math.max(min, Math.min(max, Math.round(n * 100) / 100)); out.textContent = v + unit; onchange && onchange(v); };
   return h('div', { class: 'row' }, h('span', { class: 'row-l', text: label }),
     h('div', { class: 'step' }, h('button', { text: '−', onclick: () => set(v - step) }), out, h('button', { text: '+', onclick: () => set(v + step) })));
+}
+
+/** 滑条：名字和数值在上，滑条在下 */
+export function slideRow({ label, value, min, max, step = 1, fmt = (v) => String(v), onchange }) {
+  const out = h('b', { text: fmt(value) });
+  const r = h('input', { type: 'range', class: 'slide', min, max, step, value });
+  const paint = () => r.style.setProperty('--p', ((r.value - min) / (max - min)) * 100 + '%');
+  r.addEventListener('input', () => { out.textContent = fmt(+r.value); paint(); onchange && onchange(+r.value); });
+  paint();
+  return h('div', { class: 'row slide-row' }, h('div', { class: 'slide-top' }, h('span', { class: 'row-l', text: label }), out), r);
+}
+/** 开关 + 打开了才展开的几行（关掉就收起来） */
+export function foldRow({ label, value, onchange, kids = [] }) {
+  const sw = h('input', { type: 'checkbox', class: 'sw' });
+  sw.checked = !!value;
+  const fold = h('div', { class: 'fold' + (value ? ' open' : '') }, h('div', { class: 'fold-in' }, kids));
+  sw.addEventListener('change', () => { fold.classList.toggle('open', sw.checked); onchange && onchange(sw.checked); });
+  return h('div', { class: 'frow' }, h('label', { class: 'row' }, h('span', { class: 'row-l', text: label }), sw), kids.length ? fold : null);
 }
 
 export function autosize(ta, max = 9999) {

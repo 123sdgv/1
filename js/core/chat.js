@@ -4,6 +4,7 @@ import { chat } from './api.js';
 import * as C from './context.js';
 import { parseChat, stripThink, partPreview, quoteText } from './parse.js';
 import { schedulePostReacts } from './life.js';
+import { charMail } from './mail.js';
 
 const running = new Map(); // key -> AbortController
 export const busy = (key) => running.has(key);
@@ -46,8 +47,9 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
   D.emit('typing', cid);
   let shown = 0;
   try {
+    const g = D.genOf(c);
     const text = await chat(C.buildChat(c, { extra, uptoId }), {
-      signal: ctrl.signal,
+      signal: ctrl.signal, temperature: g.temperature, max_tokens: g.maxTokens,
       onDelta: (_, all) => {
         // 只把已经写完的整行变成气泡，正在写的那行先不出
         const lines = stripThink(all).split('\n');
@@ -93,15 +95,17 @@ export function autoReply(cid, wait = 1800) {
 export function typing(cid) { if (autoT.has(cid)) autoReply(cid, 3500); }
 export const waiting = (cid) => autoT.has(cid);
 
-// 引用的是谁的话：从后往前找哪条消息里有这几个字
-export function quoteWho(cid, text, beforeId = null) {
+// 引用的是谁的话：从后往前找哪条消息里有这几个字。prefer = 先在谁说过的话里找（他引用的多半是你的话）
+export function quoteWho(cid, text, beforeId = null, prefer = null) {
   const key = String(text || '').replace(/…$/, '').slice(0, 12);
   let list = D.msgs(cid);
   if (beforeId) { const i = list.findIndex((r) => r.id === beforeId); if (i >= 0) list = list.slice(0, i); }
-  for (let i = list.length - 1; i >= 0; i--) {
-    const r = list[i];
-    if (r.role === 'note') continue;
-    if (D.partsOf(r).some((p) => quoteText(p).includes(key))) return r.role;
+  for (const only of prefer ? [prefer, null] : [null]) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const r = list[i];
+      if (r.role === 'note' || (only && r.role !== only)) continue;
+      if (D.partsOf(r).some((p) => quoteText(p).includes(key))) return r.role;
+    }
   }
   return 'me';
 }
@@ -112,7 +116,7 @@ function finish(c, rec, acts) {
   for (const p of parts) {
     if (p.t === 'photo') D.addPhoto({ acc: c.acc, desc: p.desc, who: c.id });
     if (p.t === 'event') D.addEvent({ date: p.date, title: p.title, yearly: p.yearly, by: c.id });
-    if (p.quote && !p.quote.who) p.quote.who = quoteWho(c.id, p.quote.text, rec.id);
+    if (p.quote && !p.quote.who) p.quote.who = quoteWho(c.id, p.quote.text, rec.id, 'me');
   }
   const list = D.msgs(c.id);
   // 你转给他、他还没处理的那笔（老存档里的红包也算）
@@ -124,6 +128,11 @@ function finish(c, rec, acts) {
       const m = D.saveMoment({ id: D.uid(), acc: c.acc, who: c.id, text: a.text, photos: [], ts: Date.now(), likes: [], comments: [], jobs: [] });
       schedulePostReacts(m);
       note(c.id, `${D.nameOf(c)}发布了一条新动态`);
+    }
+    // 他不知道你的邮箱就发不出去（提示词里也不会告诉他有这个格式）
+    if (a.act === 'mail' && C.knowsMyMail(c) && D.charAddr(c)) {
+      charMail(c, { subject: a.subject, body: a.body });
+      note(c.id, `${D.nameOf(c)}给你发了一封邮件`);
     }
   }
   if (parts.length && !isViewing(c.id)) {
@@ -137,7 +146,11 @@ export function note(cid, text) { return D.addMsg(cid, { role: 'note', alts: [[{
 /** 你发一条（可以是几个部件）。发完他会自动回 */
 export function send(cid, parts) {
   const rec = D.addMsg(cid, { role: 'me', alts: [parts] });
-  for (const p of parts) if (p.t === 'photo') D.addPhoto({ acc: D.charById(cid)?.acc, desc: p.desc, who: 'me' });
+  const c = D.charById(cid);
+  for (const p of parts) if (p.t === 'photo') D.addPhoto({ acc: c?.acc, desc: p.desc, who: 'me' });
+  // 你在聊天里把自己的邮箱发给他了：他就记住了
+  const addr = c && D.myAddr(D.accounts().find((a) => a.id === c.acc));
+  if (addr && c.knowMail !== addr && parts.some((p) => (p.text || '').toLowerCase().includes(addr))) D.saveChar({ ...c, knowMail: addr });
   autoReply(cid);
   return rec;
 }
@@ -167,8 +180,9 @@ export async function offlineReply(sid, { regen = false } = {}) {
   D.setStoryMsgs(sid, list);
   D.emit('typing', key);
   try {
+    const g = C.storyGen(st);
     await chat(C.buildOffline(st, { uptoId }), {
-      signal: ctrl.signal,
+      signal: ctrl.signal, temperature: g.temperature, max_tokens: g.maxTokens,
       onDelta: (_, all) => { rec.alts[rec.cur] = [{ t: 'text', text: stripThink(all).trim() }]; D.setStoryMsgs(sid, list); },
     });
   } catch (e) {

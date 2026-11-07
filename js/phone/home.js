@@ -51,6 +51,7 @@ export function buildHome() {
   home.addEventListener('click', (e) => { if (editing && (e.target === home || e.target === gridEl || e.target.classList.contains('home-scroll'))) setEdit(false); });
   render();
   for (const ev of ['msgs', 'meta', 'chars', 'weather', 'events', 'photos', 'account']) D.on(ev, () => { clearTimeout(refreshT); refreshT = setTimeout(refreshWidgets, 200); });
+  D.on('mails', refreshBadges);
   setInterval(refreshWidgets, 20000);
   D.on('meta', refreshBadges);
   D.on('chars', refreshBadges);
@@ -100,10 +101,12 @@ function refreshWidgets() {
   for (const el of $$('[data-app="calendar"] .app-ic', $('#home'))) el.innerHTML = appIcon('calendar');
 }
 export function refreshBadges() {
-  const n = D.chars().reduce((s, c) => s + (D.meta(c.id).unread || 0), 0);
-  for (const el of $$('[data-app="social"]', $('#home'))) {
-    el.querySelector('.badge')?.remove();
-    if (n) el.append(h('i', { class: 'badge', text: n > 99 ? '99+' : n }));
+  const counts = { social: D.chars().reduce((s, c) => s + (D.meta(c.id).unread || 0), 0), mail: D.unreadMails() };
+  for (const [app, n] of Object.entries(counts)) {
+    for (const el of $$(`[data-app="${app}"]`, $('#home'))) {
+      el.querySelector('.badge')?.remove();
+      if (n) el.append(h('i', { class: 'badge', text: n > 99 ? '99+' : n }));
+    }
   }
 }
 

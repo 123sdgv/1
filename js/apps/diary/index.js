@@ -9,7 +9,7 @@ export function charList(stack, { title, sub, open }) {
   const draw = () => {
     pg.scroll.querySelectorAll('.dl-list,.empty').forEach((x) => x.remove());
     const list = D.chars();
-    if (!list.length) { pg.scroll.append(h('div', { class: 'empty' }, h('b', { text: '还没有角色' }), '先去「社交」里新建角色。')); return; }
+    if (!list.length) { pg.scroll.append(h('div', { class: 'empty' }, h('b', { text: '还没有角色' }))); return; }
     const box = h('div', { class: 'dl-list' });
     for (const c of list) box.append(h('button', { class: 'dl-it', onclick: () => open(c.id) }, avatar(c.avatar, D.nameOf(c)), h('div', {}, h('b', { text: D.nameOf(c) }), h('small', { text: sub(c) }))));
     pg.scroll.append(box);
@@ -21,7 +21,7 @@ export function mount(body, { close, arg }) {
   const stack = new Stack(body, close);
   const { pg, draw } = charList(stack, {
     title: '日记',
-    sub: (c) => { const ds = D.diaries(c.id); return ds.length ? `${ds.length} 篇 · 最近 ${ds[ds.length - 1].date}` : '还没写过'; },
+    sub: (c) => { const ds = D.diaries(c.id); return ds.length ? `${ds.length} 篇 · 最近 ${ds[ds.length - 1].date}` : ''; },
     open: (id) => openChar(id),
   });
   pg.el.classList.add('dy');
@@ -49,7 +49,7 @@ export function mount(body, { close, arg }) {
       p.scroll.innerHTML = '';
       const ds = [...D.diaries(cid)].reverse();
       if (!ds.length) {
-        p.scroll.append(h('div', { class: 'empty' }, h('b', { text: '还没有日记' }), '聊过一阵以后他会自己写（打开手机时补写）。也可以点右上角让他现在写。'));
+        p.scroll.append(h('div', { class: 'empty' }, h('b', { text: '还没有日记' })));
         return;
       }
       for (const d of ds) {
@@ -63,7 +63,7 @@ export function mount(body, { close, arg }) {
           ['编辑日记', async () => { const v = await ask('编辑日记', d.text, '', true); if (v?.trim()) { d.text = v.trim(); D.setDiaries(cid, D.diaries(cid)); } }],
           ['编辑心里话', async () => { const v = await ask('编辑心里话', d.inner, '', true); if (v != null) { d.inner = v.trim(); D.setDiaries(cid, D.diaries(cid)); } }],
           ['编辑关键词', async () => { const v = await ask('关键词（用逗号隔开）', (d.keys || []).join('，')); if (v != null) { d.keys = v.split(/[,，、\s]+/).filter(Boolean); D.setDiaries(cid, D.diaries(cid)); } }],
-          ['删除这篇', async () => { if (await confirm('删除这篇日记？', '他会忘掉这篇里写的事（备忘录里记下的还在）。', '删除', true)) D.setDiaries(cid, D.diaries(cid).filter((x) => x.id !== d.id)); }, 'danger'],
+          ['删除这篇', async () => { if (await confirm('删除这篇日记？', '', '删除', true)) D.setDiaries(cid, D.diaries(cid).filter((x) => x.id !== d.id)); }, 'danger'],
         ], d.date));
         p.scroll.append(el);
       }

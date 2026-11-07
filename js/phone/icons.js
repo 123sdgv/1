@@ -60,6 +60,13 @@ export const ICONS = {
       <text x="60" y="92" text-anchor="middle" font-family="-apple-system,'SF Pro Display','Helvetica Neue',sans-serif" font-size="56" font-weight="300" fill="${INK}" letter-spacing="-2">${d.getDate()}</text>`);
   },
 
+  mail: () => svg('mail', `
+    <path d="M24 54 60 28l36 26z" fill="#3a3b3f" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>
+    <rect x="35" y="24" width="50" height="52" rx="3" fill="#fff" stroke="${INK}" stroke-width="3.2"/>
+    <g stroke="#cfd0d4" stroke-width="2.4" stroke-linecap="round"><path d="M44 36h32M44 45h32M44 54h20"/></g>
+    <g filter="url(#sh-mail)"><path d="M24 54 60 79 96 54v36a6 6 0 0 1-6 6H30a6 6 0 0 1-6-6z" fill="${INK}"/></g>
+    <path d="M27 92 55 75M93 92 65 75" stroke="#fff" stroke-opacity=".16" stroke-width="2.2" stroke-linecap="round"/>`),
+
   album: () => svg('album', `
     <defs><linearGradient id="ph-album" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5d5e63"/><stop offset="1" stop-color="#232326"/></linearGradient></defs>
     <g transform="rotate(-9 60 64)"><rect x="30" y="26" width="56" height="66" rx="3" fill="#fff" stroke="#bfc0c5" stroke-width="2"/><rect x="36" y="32" width="44" height="42" fill="#d6d7db"/></g>

@@ -30,16 +30,15 @@ export function mount(body, { close, arg }) {
     const me = h('button', { class: 'so-me', 'aria-label': '切换身份', onclick: () => switchAccount(ctx) }, avatar(acc.avatar, acc.name, 'sm'));
     const right = tab === 'list' ? btnIc('plus', () => editChar(ctx, null), '新建角色')
       : tab === 'moments' ? btnIc('edit', () => pane?.compose?.(), '写说说')
-      : btnIc('swap', () => switchAccount(ctx), '切换身份');
+      : null;
     head.append(h('div', { class: 'lt' }, me), h('b', { class: 'ttl', text: tab === 'me' ? acc.name || '我的' : P[tab].name }), h('div', { class: 'rt' }, right));
   }
   function drawTabs() {
     tabs.innerHTML = '';
     const unread = D.chars().reduce((s, c) => s + (D.meta(c.id).unread || 0), 0);
     for (const [k, t] of Object.entries(P)) {
-      tabs.append(h('button', { class: 'so-tab' + (k === tab ? ' on' : ''), onclick: () => show(k) },
-        h('span', { class: 'so-tab-ic', html: icon(t.icon) }, k === 'list' && unread ? h('i', { class: 'badge', text: unread > 99 ? '99+' : unread }) : null),
-        h('small', { text: t.name })));
+      tabs.append(h('button', { class: 'so-tab' + (k === tab ? ' on' : ''), 'aria-label': t.name, onclick: () => show(k) },
+        h('span', { class: 'so-tab-ic', html: icon(t.icon) }, k === 'list' && unread ? h('i', { class: 'badge', text: unread > 99 ? '99+' : unread }) : null)));
     }
   }
   function show(k) {
@@ -60,7 +59,7 @@ export function mount(body, { close, arg }) {
     if (!a) return;
     while (stack.pages.length > 1) { const pg = stack.pages.pop(); pg.el.remove(); pg.shade?.remove(); pg.onDestroy?.(); stack.top.el.style.transform = ''; }
     if (a.tab) show(a.tab);
-    if (a.chat) { show('list'); openChat(ctx, a.chat); }
+    if (a.chat) { if (tab !== 'list') show('list'); openChat(ctx, a.chat, a.at ? { at: a.at } : {}); }
   };
   go(arg);
   return { go, destroy: () => { pane?.destroy?.(); offs.forEach((f) => f()); stack.destroyAll(); } };

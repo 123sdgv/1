@@ -1,50 +1,62 @@
-// 聊天页：气泡、引用、语音、表情包、文字照片、转账、日程卡片、重新生成（左右翻）、编辑删除、输入栏和加号面板。
+// 聊天页：气泡、引用、语音、表情包、文字照片、转账、日程卡片、转发的聊天记录、重新生成（左右翻）。
+// 长按气泡冒出黑色小条：引用 · 编辑 · 重新回复 · 删除 · 多选。编辑在下面的输入栏里改。
+// 多选：每条前面一个圆圈，一次删掉或者合并转发（到动态、或者别的角色）。
 // 你发完消息他会自动回（core/chat.js 的 autoReply），不用点按钮。
-import { h, page, avatar, icon, btnIc, menu, ask, toast, longPress, autosize, sheet } from '../../core/ui.js';
+import { h, page, avatar, icon, btnIc, menu, toast, longPress, autosize, sheet, popbar, confirm } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { sep, md } from '../../core/time.js';
 import { fmtYuan, makeVoice, quoteText } from '../../core/parse.js';
 import * as CS from '../../core/chat.js';
-import { photoTile, viewPhoto } from '../shared.js';
+import { photoTile, viewPhoto, fwdCard } from '../shared.js';
 import { editChar } from './char.js';
 import { stickerSheet } from './stickers.js';
+import { composeMoment } from './moments.js';
 import { openApp } from '../../phone/window.js';
 
 const PAGE = 80; // 一次显示多少条记录，往上翻再加载
+const meName = () => D.curAccount().name || '我';
 
-export function openChat(ctx, cid) {
+export function openChat(ctx, cid, { at = null } = {}) {
   const c = D.charById(cid);
   if (!c) return;
   const sub = h('small', { class: 'ch-sub' });
-  const pg = page({
-    title: '', cls: 'chat',
-    onBack: () => ctx.stack.pop(),
-    right: [btnIc('door', () => goOffline(cid), '线下见面'), btnIc('more', () => editChar(ctx, cid), '资料')],
-  });
+  const moreBtn = btnIc('more', () => editChar(ctx, cid), '资料');
+  const pg = page({ title: '', cls: 'chat', onBack: () => ctx.stack.pop(), right: [moreBtn] });
   const ttl = pg.head.querySelector('.ttl');
   const tbox = h('div', { class: 'ch-ttl' });
   ttl.before(tbox);
   tbox.append(ttl, sub);
+  // 多选时左上角变成 ×
+  const backBtn = pg.head.querySelector('.bk');
+  const xBtn = h('button', { class: 'bk', 'aria-label': '退出多选', html: icon('close'), hidden: true, onclick: () => setSel(null) });
+  backBtn.after(xBtn);
   const list = h('div', { class: 'ch-list' });
   pg.scroll.classList.add('ch-scroll');
   pg.scroll.append(list);
-  const nameOf = (who) => (who === 'them' ? D.nameOf(D.charById(cid)) : D.curAccount().name || '我');
+  const nameOf = (who) => (who === 'them' ? D.nameOf(D.charById(cid)) : meName());
 
-  // ── 输入栏：引用条 + 加号、输入框、发送（他在回的时候、输入框空着，变成停止）──
-  let quote = null; // { who, text }
-  const quoteBar = h('div', { class: 'ch-quote', hidden: true });
-  const ta = h('textarea', { class: 'ch-in', rows: 1, placeholder: '发消息…', enterkeyhint: 'send' });
+  // ── 输入栏：上面一条（引用 / 正在编辑）+ 输入框、加号、发送 ──
+  let quote = null;   // { who, text }
+  let editing = null; // { id, i, draft }
+  let sel = null;     // 多选时：Set('记录id:第几个')
+  const aux = h('div', { class: 'ch-aux', hidden: true });
+  const ta = h('textarea', { class: 'ch-in', rows: 1, enterkeyhint: 'send' });
   // 回车发送（打中文时用回车选字不算；Shift+回车换行）
   ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); sendBtn.click(); } });
   const fit = autosize(ta, 120);
   const sendBtn = h('button', { class: 'ch-send', 'aria-label': '发送' });
   const plus = h('button', { class: 'ch-plus', 'aria-label': '更多', html: icon('plusc'), onclick: () => plusPanel() });
-  const foot = h('div', { class: 'ch-foot' }, quoteBar, h('div', { class: 'ch-bar' }, plus, ta, sendBtn));
+  const bar = h('div', { class: 'ch-bar' }, ta, plus, sendBtn);
+  const delSel = h('button', { 'aria-label': '删除', html: icon('trash'), onclick: () => deleteSel() });
+  const fwdSel = h('button', { 'aria-label': '转发', html: icon('fwd'), onclick: () => forwardSel() });
+  const selBar = h('div', { class: 'ch-selbar', hidden: true }, delSel, fwdSel);
+  const foot = h('div', { class: 'ch-foot' }, aux, bar, selBar);
   pg.el.append(foot);
-  ta.addEventListener('input', () => { drawSend(); if (ta.value) CS.typing(cid); });
+  ta.addEventListener('input', () => { drawSend(); if (ta.value && !editing) CS.typing(cid); });
   ta.addEventListener('focus', () => setTimeout(() => toBottom(true), 300));
   sendBtn.addEventListener('pointerdown', (e) => e.preventDefault()); // 点发送不收起键盘
   sendBtn.addEventListener('click', () => {
+    if (editing) { endEdit(true); return; }
     const text = ta.value.trim();
     if (text) { sendParts([{ t: 'text', text }]); ta.value = ''; fit(); drawSend(); return; }
     if (CS.busy(cid)) CS.stop(cid);
@@ -54,35 +66,125 @@ export function openChat(ctx, cid) {
     CS.send(cid, parts);
     toBottom(true);
   }
-  function setQuote(q) {
-    quote = q;
-    quoteBar.hidden = !q;
-    quoteBar.innerHTML = '';
-    if (q) quoteBar.append(h('span', { text: `${nameOf(q.who)}：${q.text}` }), h('button', { 'aria-label': '不引用了', html: icon('close'), onclick: () => setQuote(null) }));
+  function drawAux() {
+    aux.innerHTML = '';
+    aux.hidden = !quote && !editing;
+    if (editing) {
+      const p = D.partsOf(D.msgs(cid).find((r) => r.id === editing.id) || {})[editing.i];
+      aux.append(h('span', { class: 'aux-ic', html: icon('edit') }), h('span', { class: 'aux-t', text: p ? quoteText(p) : '' }), h('button', { 'aria-label': '不改了', html: icon('close'), onclick: () => endEdit(false) }));
+    } else if (quote) {
+      aux.append(h('span', { class: 'aux-ic', html: icon('quote') }), h('span', { class: 'aux-t', text: `${nameOf(quote.who)}：${quote.text}` }), h('button', { 'aria-label': '不引用了', html: icon('close'), onclick: () => setQuote(null) }));
+    }
   }
+  function setQuote(q) { quote = q; drawAux(); }
   function drawSend() {
-    const stop = CS.busy(cid) && !ta.value.trim();
+    const stop = !editing && CS.busy(cid) && !ta.value.trim();
     sendBtn.className = 'ch-send' + (stop ? ' stop' : ta.value.trim() ? ' go' : '');
-    sendBtn.innerHTML = icon(stop ? 'stop' : 'send');
-    sendBtn.setAttribute('aria-label', stop ? '停下' : '发送');
+    sendBtn.innerHTML = icon(editing ? 'check' : stop ? 'stop' : 'send');
+    sendBtn.setAttribute('aria-label', editing ? '改好了' : stop ? '停下' : '发送');
+  }
+  // 编辑：把那条的字放进输入框里改，打勾保存
+  function startEdit(r, i) {
+    const p = D.partsOf(r)[i];
+    if (!p) return;
+    quote = null;
+    editing = { id: r.id, i, draft: editing ? editing.draft : ta.value };
+    ta.value = p.t === 'photo' ? p.desc : p.text;
+    drawAux(); fit(); drawSend();
+    ta.focus();
+  }
+  function endEdit(save) {
+    if (!editing) return;
+    const v = ta.value.trim();
+    if (save && !v) { toast('不能是空的'); return; }
+    if (save) {
+      const r = D.msgs(cid).find((x) => x.id === editing.id), p = r && D.partsOf(r)[editing.i];
+      if (p) {
+        if (p.t === 'photo') p.desc = v;
+        else if (p.t === 'voice') Object.assign(p, makeVoice(v), p.quote ? { quote: p.quote } : {});
+        else p.text = v;
+        D.touchMsgs(cid);
+      }
+    }
+    ta.value = editing.draft || '';
+    editing = null;
+    drawAux(); fit(); drawSend();
+  }
+
+  // ── 多选 ──
+  const keyOf = (r, i) => r.id + ':' + i;
+  function setSel(s) {
+    sel = s;
+    pg.el.classList.toggle('selecting', !!sel);
+    xBtn.hidden = !sel; backBtn.hidden = !!sel; moreBtn.hidden = !!sel;
+    bar.hidden = !!sel; selBar.hidden = !sel;
+    if (sel) { if (editing) endEdit(false); setQuote(null); document.activeElement?.blur(); }
+    drawAux();
+    draw();
+  }
+  function toggleSel(r, i) {
+    const k = keyOf(r, i);
+    if (sel.has(k)) sel.delete(k); else sel.add(k);
+    draw();
+  }
+  function selected() {
+    const out = [];
+    for (const r of D.msgs(cid)) D.partsOf(r).forEach((p, i) => { if (sel.has(keyOf(r, i))) out.push({ r, i, p }); });
+    return out;
+  }
+  async function deleteSel() {
+    const items = selected();
+    if (!items.length) return;
+    if (!(await confirm(`删除 ${items.length} 条？`, '', '删除', true))) return;
+    const drop = new Set(items.map((x) => keyOf(x.r, x.i)));
+    const left = [];
+    for (const r of D.msgs(cid)) {
+      if (r.role === 'note') { left.push(r); continue; }
+      const parts = D.partsOf(r);
+      const keep = parts.filter((_, i) => !drop.has(keyOf(r, i)));
+      if (!keep.length) continue;
+      if (keep.length !== parts.length) r.alts[r.cur || 0] = keep;
+      left.push(r);
+    }
+    D.setMsgs(cid, left);
+    setSel(null);
+  }
+  function forwardSel() {
+    const items = selected();
+    if (!items.length) return;
+    const fwd = {
+      t: 'fwd', title: `${meName()}和${D.nameOf(c)}的聊天记录`,
+      items: items.map(({ r, p }) => ({ name: r.role === 'me' ? meName() : c.name || D.nameOf(c), text: quoteText(p, 400) })),
+    };
+    const body = h('div', { class: 'pick-list' });
+    const s = sheet({ title: '转发到', body });
+    body.append(h('button', { class: 'pick-it', onclick: () => { s.close(); setSel(null); composeMoment({ fwd }); } },
+      h('span', { class: 'av sm pick-ic', html: icon('star') }), h('span', { text: '动态' })));
+    for (const o of D.chars().filter((x) => x.id !== cid)) {
+      body.append(h('button', { class: 'pick-it', onclick: () => { s.close(); setSel(null); CS.send(o.id, [fwd]); toast('转发了'); } },
+        avatar(o.avatar, D.nameOf(o), 'sm'), h('span', { text: D.nameOf(o) })));
+    }
   }
 
   // ── 消息列表：按记录增量刷新 ──
   let shown = PAGE;
   const els = new Map(); // id -> { el, sig }
-  function sig(r, isLast) { return JSON.stringify([r.cur, r.alts?.length, D.partsOf(r), !!r.pending, r.error || '', isLast, D.stickers().length]); }
+  function sig(r, isLast) {
+    const s = sel ? D.partsOf(r).map((_, i) => (sel.has(keyOf(r, i)) ? 1 : 0)).join('') : '';
+    return JSON.stringify([r.cur, r.alts?.length, D.partsOf(r), !!r.pending, r.error || '', isLast, D.stickers().length, !!sel, s]);
+  }
   function draw() {
     const all = D.msgs(cid);
     const recs = all.slice(-shown);
     const nearBottom = pg.scroll.scrollHeight - pg.scroll.scrollTop - pg.scroll.clientHeight < 140;
-    const lastThem = [...all].reverse().find((r) => r.role !== 'note');
+    const lastAny = [...all].reverse().find((r) => r.role !== 'note');
     const keep = new Set(recs.map((r) => r.id));
     for (const [id, x] of els) if (!keep.has(id)) { x.el.remove(); els.delete(id); }
     let prevTs = 0, anchor = null;
     if (all.length > recs.length && !list.querySelector('.ch-older')) list.prepend(h('button', { class: 'ch-older', text: '查看更早的消息', onclick: () => { const h0 = pg.scroll.scrollHeight; shown += PAGE; list.querySelector('.ch-older')?.remove(); draw(); pg.scroll.scrollTop += pg.scroll.scrollHeight - h0; } }));
     if (all.length <= recs.length) list.querySelector('.ch-older')?.remove();
     for (const r of recs) {
-      const isLast = r === lastThem && r.role === 'them';
+      const isLast = r === lastAny;
       const showTime = r.ts - prevTs > 5 * 60000;
       const s = sig(r, isLast) + showTime;
       let x = els.get(r.id);
@@ -98,7 +200,8 @@ export function openChat(ctx, cid) {
     sub.textContent = CS.busy(cid) ? '对方正在输入…' : '';
     pg.setTitle(D.nameOf(D.charById(cid)) || '');
     drawSend();
-    if (nearBottom) toBottom();
+    if (sel) { const n = selected().length; delSel.disabled = fwdSel.disabled = !n; }
+    if (nearBottom && !sel) toBottom();
   }
   function toBottom(smooth) { requestAnimationFrame(() => pg.scroll.scrollTo({ top: pg.scroll.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })); }
 
@@ -112,20 +215,24 @@ export function openChat(ctx, cid) {
     parts.forEach((p, i) => {
       const main = partEl(r, p);
       const col = h('div', { class: 'bcol' }, main,
-        p.t === 'voice' ? h('div', { class: 'vo-txt' }, p.text, p.tone ? h('small', { text: `语气：${p.tone}` }) : null) : null,
-        p.quote ? h('div', { class: 'qt' }, `${nameOf(p.quote.who || CS.quoteWho(cid, p.quote.text, r.id))}：${p.quote.text}`) : null);
-      longPress(main, () => partMenu(r, i, isLast));
-      wrap.append(h('div', { class: 'ln' }, r.role === 'them' ? av() : null, col, r.role === 'me' ? av() : null));
+        p.t === 'voice' ? h('div', { class: 'vo-txt', text: p.text }) : null,
+        p.quote ? h('div', { class: 'qt' }, `${nameOf(p.quote.who || CS.quoteWho(cid, p.quote.text, r.id, r.role === 'them' ? 'me' : 'them'))}：${p.quote.text}`) : null);
+      const on = sel?.has(keyOf(r, i));
+      const ln = h('div', { class: 'ln' + (on ? ' on' : '') },
+        sel ? h('span', { class: 'ck', html: icon(on ? 'ringck' : 'ring') }) : null,
+        r.role === 'them' ? av() : null, col, r.role === 'me' ? av() : null);
+      if (sel) ln.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); toggleSel(r, i); }, true);
+      else longPress(main, (e) => partBar(main, r, i, isLast, e));
+      wrap.append(ln);
     });
     if (r.pending && !parts.length) wrap.append(h('div', { class: 'ln' }, av(), h('div', { class: 'bub typing' }, h('span', { class: 'dots3' }, h('i'), h('i'), h('i')))));
     if (r.error) wrap.append(h('button', { class: 'ch-err', onclick: () => regen(), text: `没回成：${r.error}　点这里重试` }));
-    if (isLast && !r.pending && parts.length) {
+    if (isLast && r.role === 'them' && !r.pending && parts.length && r.alts.length > 1 && !sel) {
       const n = r.alts.length;
       wrap.append(h('div', { class: 'ch-ctl' },
-        n > 1 ? h('button', { 'aria-label': '上一个', html: icon('left'), disabled: r.cur === 0 || null, onclick: () => flipAlt(r, -1) }) : null,
-        n > 1 ? h('span', { text: `${r.cur + 1} / ${n}` }) : null,
-        n > 1 ? h('button', { 'aria-label': '下一个', html: icon('right'), disabled: r.cur === n - 1 || null, onclick: () => flipAlt(r, 1) }) : null,
-        h('button', { class: 'ch-regen', 'aria-label': '重新生成', html: icon('redo'), onclick: () => regen() })));
+        h('button', { 'aria-label': '上一个', html: icon('left'), disabled: r.cur === 0 || null, onclick: () => flipAlt(r, -1) }),
+        h('span', { text: `${r.cur + 1} / ${n}` }),
+        h('button', { 'aria-label': '下一个', html: icon('right'), disabled: r.cur === n - 1 || null, onclick: () => flipAlt(r, 1) })));
     }
     return wrap;
   }
@@ -151,6 +258,7 @@ export function openChat(ctx, cid) {
         h('div', { class: 'cd-top' }, h('span', { class: 'cd-ic', html: icon('cal') }), h('div', {}, h('b', { text: p.title }), h('small', { text: (p.yearly ? '每年 ' : '') + md(new Date(p.date + 'T12:00:00').getTime()) }))),
         h('div', { class: 'cd-foot', text: '记进了日历' }));
     }
+    if (p.t === 'fwd') return fwdCard(p);
     return h('div', { class: 'bub', text: '' });
   }
 
@@ -163,79 +271,64 @@ export function openChat(ctx, cid) {
     ], `${D.nameOf(c)}转账给你`);
   }
 
-  // ── 长按菜单 ──
-  function partMenu(r, i, isLast) {
+  // ── 长按：黑色小条 ──
+  function partBar(anchor, r, i, isLast, e) {
     const p = D.partsOf(r)[i];
-    const items = [];
-    if (p.t === 'text' || p.t === 'voice') items.push(['复制', () => navigator.clipboard?.writeText(p.text).then(() => toast('已复制'), () => toast('复制不了'))]);
-    if (p.t !== 'note') items.push(['引用', () => { setQuote({ who: r.role === 'me' ? 'me' : 'them', text: quoteText(p) }); ta.focus(); }]);
-    if (p.t === 'text' || p.t === 'photo') items.push(['编辑', async () => {
-      const v = await ask(p.t === 'text' ? '编辑' : '编辑照片的画面', p.t === 'text' ? p.text : p.desc, '', true);
-      if (v == null || !v.trim()) return;
-      if (p.t === 'text') p.text = v.trim(); else p.desc = v.trim();
-      D.touchMsgs(cid);
-    }]);
-    if (p.t === 'voice') items.push(['编辑', async () => {
-      const v = await voiceSheet(p.text, p.tone, '保存');
-      if (!v) return;
-      Object.assign(p, makeVoice(v.text, v.tone));
-      D.touchMsgs(cid);
-    }]);
-    if (isLast) items.push(['重新生成', () => regen()]);
-    items.push(['删除这条', () => {
-      const parts = D.partsOf(r);
-      parts.splice(i, 1);
-      if (!parts.length) D.setMsgs(cid, D.msgs(cid).filter((x) => x.id !== r.id)); else D.touchMsgs(cid);
-    }, 'danger']);
-    if (D.partsOf(r).length > 1) items.push(['删除这一整组', () => D.setMsgs(cid, D.msgs(cid).filter((x) => x.id !== r.id)), 'danger']);
-    menu(items);
+    if (!p) return;
+    popbar(anchor, [
+      ['quote', () => { if (editing) endEdit(false); setQuote({ who: r.role === 'me' ? 'me' : 'them', text: quoteText(p) }); ta.focus(); }, '引用'],
+      ['text', 'voice', 'photo'].includes(p.t) ? ['edit', () => startEdit(r, i), '编辑'] : null,
+      isLast ? ['redo', () => regen(), '重新回复'] : null,
+      ['trash', () => {
+        const parts = D.partsOf(r);
+        parts.splice(i, 1);
+        if (!parts.length) D.setMsgs(cid, D.msgs(cid).filter((x) => x.id !== r.id)); else D.touchMsgs(cid);
+      }, '删除'],
+      ['multi', () => setSel(new Set([keyOf(r, i)])), '多选'],
+    ], e ? { x: e.clientX, y: e.clientY } : null);
   }
   function flipAlt(r, d) { r.cur = Math.max(0, Math.min(r.alts.length - 1, r.cur + d)); D.touchMsgs(cid); }
+  // 最后一条是他的：重新生成一个版本；是你的：让他回
   function regen() {
-    const all = D.msgs(cid);
-    const last = [...all].reverse().find((x) => x.role !== 'note');
+    const last = [...D.msgs(cid)].reverse().find((x) => x.role !== 'note');
     if (last?.role === 'them') CS.reply(cid, { regen: true });
     else CS.reply(cid);
   }
 
-  // ── 加号面板 ──
+  // ── 加号面板（只有图标）──
   function plusPanel() {
     const s = sheet({ title: '', body: h('div', { class: 'ch-panel' },
       tile('smile', '表情包', () => { s.close(); stickerSheet((st) => sendParts([{ t: 'sticker', name: st.name }])); }),
       tile('photo', '相册', () => { s.close(); pickPhoto(); }),
-      tile('camera', '拍照', async () => { s.close(); const v = await ask('拍一张', '', '描述这张照片的画面，比如：窗台上的猫，背后是下雨的街', true); if (v?.trim()) sendParts([{ t: 'photo', desc: v.trim() }]); }),
-      tile('mic', '语音', async () => { s.close(); const v = await voiceSheet(); if (v) sendParts([makeVoice(v.text, v.tone)]); }),
-      tile('pay', '转账', () => { s.close(); transfer(); }),
-      tile('door', '线下', () => { s.close(); goOffline(cid); })) });
+      tile('camera', '拍照', async () => { s.close(); const v = await textSheet('拍照'); if (v) sendParts([{ t: 'photo', desc: v }]); }),
+      tile('mic', '语音', async () => { s.close(); const v = await textSheet('语音'); if (v) sendParts([makeVoice(v)]); }),
+      tile('pay', '转账', () => { s.close(); transfer(); })) });
   }
-  const tile = (ic, name, fn) => h('button', { class: 'ch-tile', onclick: fn }, h('span', { html: icon(ic) }), h('small', { text: name }));
+  const tile = (ic, name, fn) => h('button', { class: 'ch-tile', 'aria-label': name, onclick: fn }, h('span', { html: icon(ic) }));
   function pickPhoto() {
     const ps = D.photosOf();
     const grid = h('div', { class: 'ph-grid' });
-    const s = sheet({ title: '选一张照片', body: grid, full: true });
-    if (!ps.length) grid.append(h('div', { class: 'empty', text: '相册是空的。可以先用「拍照」写一张，或者去相册 App 里添加。' }));
+    const s = sheet({ title: '相册', body: grid, full: true });
+    if (!ps.length) grid.append(h('div', { class: 'empty', text: '相册是空的' }));
     for (const p of ps) grid.append(photoTile(p.desc, { onclick: () => { s.close(); sendParts([{ t: 'photo', desc: p.desc }]); } }));
   }
-  /** 语音：写说了什么，语气可写可不写。返回 { text, tone } 或 null */
-  function voiceSheet(text = '', tone = '', okText = '发送') {
+  /** 写一段字（照片的画面、语音说的话）。返回文字或 null */
+  function textSheet(title) {
     return new Promise((res) => {
-      const t1 = h('textarea', { class: 'dlg-in', rows: 3, placeholder: '说了什么' });
-      t1.value = text;
-      const t2 = h('input', { class: 'dlg-in', type: 'text', value: tone, placeholder: '比如：小声、带着笑、有点委屈（可以不写）' });
+      const t1 = h('textarea', { class: 'dlg-in', rows: 4 });
       let done = false;
-      const s = sheet({ title: '语音', onClose: () => { if (!done) res(null); }, body: h('div', { class: 'money' },
-        h('label', {}, h('span', { text: '说的话' }), t1),
-        h('label', {}, h('span', { text: '语气' }), t2),
-        h('button', { class: 'btn wide', text: okText, onclick: () => {
-          if (!t1.value.trim()) { toast('写一下说了什么'); return; }
-          done = true; res({ text: t1.value.trim(), tone: t2.value.trim() }); s.close();
+      const s = sheet({ title, onClose: () => { if (!done) res(null); }, body: h('div', { class: 'money' },
+        h('label', {}, t1),
+        h('button', { class: 'btn wide', text: '发送', onclick: () => {
+          if (!t1.value.trim()) return;
+          done = true; res(t1.value.trim()); s.close();
         } })) });
       setTimeout(() => t1.focus(), 300);
     });
   }
   async function transfer() {
-    const amt = h('input', { class: 'dlg-in', type: 'text', inputmode: 'decimal', placeholder: '金额' });
-    const nt = h('input', { class: 'dlg-in', type: 'text', placeholder: '备注（可以不写）' });
+    const amt = h('input', { class: 'dlg-in', type: 'text', inputmode: 'decimal' });
+    const nt = h('input', { class: 'dlg-in', type: 'text' });
     const ok = await new Promise((res) => {
       const body = h('div', { class: 'money' }, h('label', {}, h('span', { text: '金额（元）' }), amt), h('label', {}, h('span', { text: '备注' }), nt),
         h('button', { class: 'btn wide', text: '转账', onclick: () => { res(true); s.close(); } }));
@@ -251,12 +344,14 @@ export function openChat(ctx, cid) {
   const offs = [D.on('msgs', (id) => id === cid && draw()), D.on('typing', (id) => id === cid && draw()), D.on('chars', draw), D.on('account', draw), D.on('stickers', draw)];
   ctx.push({ el: pg.el, onShow: () => CS.setViewing(cid), onHide: () => CS.setViewing(null), onDestroy: () => { CS.setViewing(null); offs.forEach((f) => f()); } });
   CS.setViewing(cid);
+  // 从搜索点进来：翻到那条，闪一下
+  if (at) {
+    const all = D.msgs(cid), i = all.findIndex((r) => r.id === at);
+    if (i >= 0) shown = Math.max(PAGE, all.length - i + 5);
+  }
   draw();
-  toBottom();
-}
-
-/** 线下：有这个角色的剧情就打开最近一段，没有就新建一段 */
-export function goOffline(cid) {
-  const st = D.storiesOf().find((s) => s.char === cid);
-  openApp('offline', st ? { story: st.id } : { newFor: cid });
+  if (at && els.get(at)) {
+    const el = els.get(at).el;
+    requestAnimationFrame(() => { pg.scroll.scrollTop = el.offsetTop - pg.scroll.clientHeight / 2 + el.offsetHeight / 2; el.classList.add('hit'); setTimeout(() => el.classList.remove('hit'), 1800); });
+  } else toBottom();
 }

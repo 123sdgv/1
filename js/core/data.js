@@ -8,11 +8,9 @@ export const uid = () => Date.now().toString(36) + Math.random().toString(36).sl
 export const now = () => Date.now();
 
 // ── 设置 ──
+// 这些现在都是每个角色单独设（角色资料里），这里只当新角色和老存档的默认值
 const SETTINGS = {
-  temperature: 0.9,
-  maxTokens: 1500,
-  histLen: 40,          // 聊天时带最近多少条记录
-  // 下面这几项现在每个角色单独设（角色资料里），这里只当老存档的默认值
+  temperature: 0.9, maxTokens: 1500, histLen: 40,
   proactive: true, awayHours: 6, charPosts: true, autoDiary: true, quietFrom: 1, quietTo: 8,
 };
 export const settings = () => ({ ...SETTINGS, ...S.get('settings', {}) });
@@ -39,7 +37,7 @@ export const accounts = () => S.get('accounts', []);
 export function curAccount() {
   let list = accounts();
   if (!list.length) {
-    list = [{ id: uid(), name: '我', avatar: null, sign: '', persona: '', world: '', cover: null, bubble: 'ink', createdAt: now() }];
+    list = [{ id: uid(), name: '我', avatar: null, sign: '', persona: '', world: '', cover: null, mail: '', createdAt: now() }];
     S.set('accounts', list);
     S.set('curAcc', list[0].id);
   }
@@ -55,7 +53,7 @@ export function saveAccount(a) {
   return a;
 }
 export function newAccount(name = '新身份') {
-  const a = { id: uid(), name, avatar: null, sign: '', persona: '', world: '', cover: null, bubble: 'ink', createdAt: now() };
+  const a = { id: uid(), name, avatar: null, sign: '', persona: '', world: '', cover: null, mail: '', createdAt: now() };
   saveAccount(a);
   return a;
 }
@@ -63,6 +61,7 @@ export function removeAccount(id) {
   for (const c of S.get('chars', []).filter((c) => c.acc === id)) removeChar(c.id, true);
   S.set('moments', moments().filter((m) => m.acc !== id));
   S.set('photos', photos().filter((p) => p.acc !== id));
+  S.set('mails', mails().filter((m) => m.acc !== id));
   for (const st of stories().filter((s) => s.acc === id)) removeStory(st.id, true);
   S.set('accounts', accounts().filter((a) => a.id !== id));
   if (S.get('curAcc') === id) S.set('curAcc', accounts()[0]?.id || null);
@@ -73,21 +72,27 @@ export function removeAccount(id) {
 export const allChars = () => S.get('chars', []);
 export const chars = (acc = curAccount().id) => allChars().filter((c) => c.acc === acc);
 export const charById = (id) => allChars().find((c) => c.id === id) || null;
-// 显示用的名字：你给的备注 > 他自己起的网名 > 名字（像聊天软件那样）
-export const nameOf = (c) => (c ? c.nick || c.net || c.name || '未命名' : '');
+// 显示用的名字：你给的备注 > 名字
+export const nameOf = (c) => (c ? c.nick || c.name || '未命名' : '');
 export function newChar(acc = curAccount().id) {
-  return { id: uid(), acc, name: '', nick: '', avatar: null, persona: '', net: '', sign: '', knows: [], life: lifeOf({}), createdAt: now() };
+  return { id: uid(), acc, name: '', nick: '', avatar: null, persona: '', knows: [], life: lifeOf({}), gen: genOf({}), createdAt: now() };
 }
-// 他的生活（每个角色单独设）：多久没聊来找你、多久发一条动态、多久写一篇日记、几点到几点别打扰
+// 他的生活（每个角色单独设）：多久没聊来找你、多久发一条动态、多久写一篇日记、多久写一封信、几点到几点别打扰
 export function lifeOf(c) {
   const st = settings();
   return {
     away: st.proactive, awayHours: st.awayHours,
     post: st.charPosts, postHours: 24,
     diary: st.autoDiary, diaryHours: 20,
-    quietFrom: st.quietFrom, quietTo: st.quietTo,
+    mail: true, mailDays: 3,
+    quiet: true, quietFrom: st.quietFrom, quietTo: st.quietTo,
     ...(c?.life || {}),
   };
+}
+// 模型参数（每个角色单独设）：温度、一次最多回多少 token、带多少条聊天记录。老存档用原来设置里的
+export function genOf(c) {
+  const st = settings();
+  return { temperature: st.temperature, maxTokens: st.maxTokens, histLen: st.histLen, ...(c?.gen || {}) };
 }
 export function saveChar(c) {
   const list = allChars();
@@ -108,8 +113,9 @@ export function removeChar(id, quiet) {
 
 // ── 聊天记录 ──
 // 一条记录 { id, role:'me'|'them'|'note', ts, alts:[[部件...]], cur }
-// 部件 { t:'text', text, quote? } { t:'voice', text, tone, sec, quote? } { t:'sticker', name } { t:'photo', desc }
+// 部件 { t:'text', text, quote? } { t:'voice', text, sec, quote? } { t:'sticker', name } { t:'photo', desc }
 //      { t:'pay', amount, note, state } { t:'event', date, title, yearly } { t:'note', text }
+//      { t:'fwd', title, items:[{ name, text }] }（合并转发的聊天记录）
 //      （老存档里可能还有 t:'red'，按转账显示）  quote = { who:'me'|'them', text }
 export const msgs = (cid) => S.get('msgs.' + cid, []);
 export function setMsgs(cid, arr) { S.set('msgs.' + cid, arr); emit('msgs', cid); }
@@ -134,7 +140,7 @@ export function setMeta(cid, patch) {
 }
 
 // ── 动态 ──
-// { id, acc, who:'me'|角色id, text, photos:[描述], ts, likes:[who], comments:[{id, who, to, text, ts}], jobs:[{kind, who, due, to}] }
+// { id, acc, who:'me'|角色id, text, photos:[描述], fwd?:转发的聊天记录, ts, likes:[who], comments:[{id, who, to, text, photos?, ts}], jobs:[{kind, who, due, to}] }
 export const moments = () => S.get('moments', []);
 export const momentsOf = (acc = curAccount().id) => moments().filter((m) => m.acc === acc).sort((a, b) => b.ts - a.ts);
 export function saveMoment(m) {
@@ -215,8 +221,10 @@ export function addPhoto(p) {
 export function setPhotos(arr) { S.set('photos', arr); emit('photos'); }
 
 // ── 线下剧情 ── { id, acc, char, title, scene, createdAt, lastTs }，记录在 story.<id>，结构和聊天一样（部件只有 text）
+// 不用社交里的角色、自己写的：char 为空、acc 为空（哪个身份下都看得到），设定在 card 里
+//   card { name, persona, world, meName, me, gen }
 export const stories = () => S.get('stories', []);
-export const storiesOf = (acc = curAccount().id) => stories().filter((s) => s.acc === acc).sort((a, b) => (b.lastTs || b.createdAt) - (a.lastTs || a.createdAt));
+export const storiesOf = (acc = curAccount().id) => stories().filter((s) => s.acc === acc || (!s.char && !s.acc)).sort((a, b) => (b.lastTs || b.createdAt) - (a.lastTs || a.createdAt));
 export function saveStory(st) {
   const list = stories();
   const i = list.findIndex((x) => x.id === st.id);
@@ -228,6 +236,45 @@ export function saveStory(st) {
 export function removeStory(id, quiet) { S.set('stories', stories().filter((s) => s.id !== id)); S.del('story.' + id); if (!quiet) emit('stories'); }
 export const storyMsgs = (id) => S.get('story.' + id, []);
 export function setStoryMsgs(id, arr) { S.set('story.' + id, arr); const st = stories().find((s) => s.id === id); if (st) { st.lastTs = now(); S.touch('stories'); } emit('story', id); }
+
+// ── 邮箱 ── 地址都是 名字@ph.com。你的在身份里（acc.mail），他的在角色里（c.mail，他自己起，你不一定知道）
+// 邮件 { id, acc, box:'inbox'|'sent'|'draft'|'trash', was（进回收站前在哪）, from, fromName, to, subject, body, ts, read, char（跟哪个角色有关）}
+export const MAIL_DOMAIN = 'ph.com';
+export const addrOf = (local) => (local ? `${local}@${MAIL_DOMAIN}` : '');
+export const myAddr = (acc = curAccount()) => addrOf(acc?.mail);
+export const charAddr = (c) => addrOf(c?.mail);
+/** 这个地址是谁：当前身份下的角色，或者你自己 */
+export function whoseAddr(addr, acc = curAccount()) {
+  const a = String(addr || '').trim().toLowerCase();
+  if (!a) return null;
+  if (a === myAddr(acc)) return { me: true };
+  const c = chars(acc.id).find((x) => x.mail && charAddr(x) === a);
+  return c ? { c } : null;
+}
+/** 起的名字被占了就在后面加数字 */
+export function freeMailName(local, exceptChar = null) {
+  const taken = new Set([...allChars().filter((c) => c.id !== exceptChar).map((c) => c.mail), ...accounts().map((a) => a.mail)].filter(Boolean));
+  let n = local, i = 2;
+  while (taken.has(n)) n = local + (i++);
+  return n;
+}
+export const mails = () => S.get('mails', []);
+export const mailsOf = (box, acc = curAccount().id) => mails().filter((m) => m.acc === acc && m.box === box).sort((a, b) => b.ts - a.ts);
+export const unreadMails = (acc = curAccount().id) => mails().filter((m) => m.acc === acc && m.box === 'inbox' && !m.read).length;
+export function saveMail(m) {
+  const list = mails();
+  const i = list.findIndex((x) => x.id === m.id);
+  if (i < 0) list.push(m); else list[i] = m;
+  S.set('mails', list);
+  emit('mails');
+  return m;
+}
+export function removeMail(id) { S.set('mails', mails().filter((m) => m.id !== id)); emit('mails'); }
+/** 跟某个角色来往过的信（草稿不算），按时间排 */
+export const mailsWith = (cid) => mails().filter((m) => m.char === cid && m.box !== 'draft').sort((a, b) => a.ts - b.ts);
+// 还没到时间的「他回信」：{ who, mail, due }
+export const mailJobs = () => S.get('mailJobs', []);
+export function setMailJobs(arr) { S.set('mailJobs', arr); }
 
 // ── 主屏幕布局 ──
 export const layout = () => S.get('layout', null);

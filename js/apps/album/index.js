@@ -8,7 +8,7 @@ export function mount(body, { close }) {
   const stack = new Stack(body, close);
   let who = 'all';
   const pg = page({ title: '相册', big: true, left: h('span'), right: btnIc('plus', async () => {
-    const v = await ask('拍一张', '', '描述这张照片的画面', true);
+    const v = await ask('拍一张', '', '', true);
     if (v?.trim()) { D.addPhoto({ desc: v.trim(), who: 'me' }); toast('存好了'); }
   }, '拍一张') });
   pg.el.classList.add('alb');
@@ -20,7 +20,7 @@ export function mount(body, { close }) {
       h('button', { class: 'chip' + (who === 'all' ? ' on' : ''), text: '全部', onclick: () => { who = 'all'; draw(); } }),
       people.map((w) => h('button', { class: 'chip' + (who === w ? ' on' : ''), text: w === 'me' ? '我拍的' : D.nameOf(D.charById(w)) || '已删除', onclick: () => { who = w; draw(); } }))));
     const list = who === 'all' ? all : all.filter((p) => p.who === who);
-    if (!list.length) { pg.scroll.append(h('div', { class: 'empty' }, h('b', { text: '还没有照片' }), '角色在聊天里发来的照片会存到这里；点右上角也能自己拍一张。')); return; }
+    if (!list.length) { pg.scroll.append(h('div', { class: 'empty' }, h('b', { text: '还没有照片' }))); return; }
     let day = '', grid = null;
     for (const p of list) {
       const d = md(p.ts);
@@ -28,7 +28,7 @@ export function mount(body, { close }) {
       const t = photoTile(p.desc, { onclick: () => viewPhoto(p) });
       longPress(t, () => menu([
         ['编辑画面', async () => { const v = await ask('编辑画面', p.desc, '', true); if (v?.trim()) { p.desc = v.trim(); D.setPhotos(D.photos()); } }],
-        ['删除', async () => { if (await confirm('删除这张照片？', '聊天记录里的那张不受影响。', '删除', true)) D.setPhotos(D.photos().filter((x) => x.id !== p.id)); }, 'danger'],
+        ['删除', async () => { if (await confirm('删除这张照片？', '', '删除', true)) D.setPhotos(D.photos().filter((x) => x.id !== p.id)); }, 'danger'],
       ]));
       grid.append(t);
     }

@@ -3,6 +3,7 @@ import { h, $, avatar } from '../core/ui.js';
 import * as D from '../core/data.js';
 import { hm, md, weekday, short } from '../core/time.js';
 import { partPreview } from '../core/parse.js';
+import { appIcon } from './icons.js';
 
 let locked = false, onOpen = null, hiddenAt = 0, timer = 0;
 const RELOCK = 2 * 60 * 1000; // 切出去超过两分钟再回来就锁上
@@ -15,7 +16,7 @@ export function initLock(open) {
     if (document.hidden) hiddenAt = Date.now();
     else if (hiddenAt && Date.now() - hiddenAt > RELOCK) lock();
   });
-  for (const ev of ['msgs', 'meta', 'chars', 'account']) D.on(ev, () => locked && renderNotes());
+  for (const ev of ['msgs', 'meta', 'chars', 'account', 'mails']) D.on(ev, () => locked && renderNotes());
   lock();
 }
 
@@ -53,15 +54,21 @@ function renderNotes() {
     const ps = D.partsOf(last);
     items.push({ c, n, ts: last.ts, text: partPreview(ps[ps.length - 1]) });
   }
+  // 没读的邮件也放上来
+  for (const m of D.mails().filter((x) => x.acc === D.curAccount().id && x.box === 'inbox' && !x.read)) {
+    const c = m.char ? D.charById(m.char) : null;
+    items.push({ mail: m, ts: m.ts, title: c ? D.nameOf(c) : m.fromName || m.from, text: m.subject || '（无主题）', c });
+  }
   items.sort((a, b) => b.ts - a.ts);
   for (const it of items.slice(0, 4)) {
-    box.append(h('button', { class: 'lk-note', onclick: (e) => { e.stopPropagation(); unlock(() => onOpen('social', { chat: it.c.id })); } },
-      avatar(it.c.avatar, D.nameOf(it.c), 'sm'),
+    const open = it.mail ? () => onOpen('mail', { mail: it.mail.id }) : () => onOpen('social', { chat: it.c.id });
+    box.append(h('button', { class: 'lk-note', onclick: (e) => { e.stopPropagation(); unlock(open); } },
+      it.mail ? h('span', { class: 'lk-mail', html: appIcon('mail') }) : avatar(it.c.avatar, D.nameOf(it.c), 'sm'),
       h('div', { class: 'lk-note-b' },
-        h('div', { class: 'lk-note-t' }, h('b', { text: D.nameOf(it.c) }), h('small', { text: short(it.ts) })),
-        h('p', { text: it.n > 1 ? `[${it.n}条] ${it.text}` : it.text }))));
+        h('div', { class: 'lk-note-t' }, h('b', { text: it.mail ? it.title : D.nameOf(it.c) }), h('small', { text: short(it.ts) })),
+        h('p', { text: it.mail ? it.text : it.n > 1 ? `[${it.n}条] ${it.text}` : it.text }))));
   }
-  if (items.length > 4) box.append(h('div', { class: 'lk-more', text: `还有 ${items.length - 4} 个人的消息` }));
+  if (items.length > 4) box.append(h('div', { class: 'lk-more', text: `还有 ${items.length - 4} 条` }));
 }
 
 function wireSwipe(el) {

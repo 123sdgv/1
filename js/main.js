@@ -22,17 +22,18 @@ function walls() {
 }
 
 // 顶部横幅：不在那个对话里时，来消息了从上面滑下来
-function banner({ cid, moment, diary, text }) {
+function banner({ cid, moment, diary, mail, text }) {
   if (isLocked()) return;
   if (cid && isViewing(cid)) return;
   if (diary && currentApp() === 'diary') return;
   if (moment && currentApp() === 'social') return;
+  if (mail && currentApp() === 'mail') return;
   const c = cid ? D.charById(cid) : null;
-  const app = cid || moment ? 'social' : diary ? 'diary' : null;
+  const app = cid || moment ? 'social' : diary ? 'diary' : mail ? 'mail' : null;
   const el = h('button', { class: 'banner' },
     c ? avatar(c.avatar, D.nameOf(c), 'sm') : h('span', { class: 'banner-ic', html: appIcon(app || 'social') }),
-    h('div', {}, h('b', { text: c ? D.nameOf(c) : moment ? '动态' : '日记' }), h('p', { text })));
-  const go = () => { dismiss(); if (cid) openApp('social', { chat: cid }); else if (moment) openApp('social', { tab: 'moments' }); else if (diary) openApp('diary', { char: diary }); };
+    h('div', {}, h('b', { text: c ? D.nameOf(c) : moment ? '动态' : mail ? '邮箱' : '日记' }), h('p', { text })));
+  const go = () => { dismiss(); if (cid) openApp('social', { chat: cid }); else if (moment) openApp('social', { tab: 'moments' }); else if (diary) openApp('diary', { char: diary }); else if (mail) openApp('mail', { mail }); };
   el.addEventListener('click', go);
   $('#banners').append(el);
   requestAnimationFrame(() => el.classList.add('on'));

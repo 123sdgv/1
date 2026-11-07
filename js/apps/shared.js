@@ -1,4 +1,4 @@
-// 几个 App 共用的小东西：文字照片、看照片、选角色
+// 几个 App 共用的小东西：文字照片、看照片、选角色、转发的聊天记录卡片
 import { h, sheet, avatar } from '../core/ui.js';
 import * as D from '../core/data.js';
 import { md, hm } from '../core/time.js';
@@ -26,6 +26,19 @@ export function pickChar(title, onPick, filter = () => true) {
   const list = D.chars().filter(filter);
   const body = h('div', { class: 'pick-list' });
   const s = sheet({ title, body });
-  if (!list.length) body.append(h('div', { class: 'empty', text: '这个身份下还没有角色。去「社交 → 我的」里新建一个。' }));
+  if (!list.length) body.append(h('div', { class: 'empty', text: '还没有角色' }));
   for (const c of list) body.append(h('button', { class: 'pick-it', onclick: () => { s.close(); onPick(c); } }, avatar(c.avatar, D.nameOf(c), 'sm'), h('span', { text: D.nameOf(c) })));
+}
+
+/** 转发的聊天记录：一张卡片，点开看全部 */
+export function fwdCard(f, cls = '') {
+  const items = f.items || [];
+  return h('button', { class: 'card fwd ' + cls, onclick: (e) => { e.stopPropagation(); viewFwd(f); } },
+    h('div', { class: 'fw-top' }, h('b', { text: f.title }),
+      h('div', { class: 'fw-lines' }, items.slice(0, 3).map((x) => h('small', { text: `${x.name}：${x.text}` })))),
+    h('div', { class: 'cd-foot', text: `聊天记录 · ${items.length} 条` }));
+}
+export function viewFwd(f) {
+  sheet({ title: f.title, full: (f.items || []).length > 8, body: h('div', { class: 'fw-view' },
+    (f.items || []).map((x) => h('div', { class: 'fw-it' }, h('b', { text: x.name }), h('p', { text: x.text })))) });
 }

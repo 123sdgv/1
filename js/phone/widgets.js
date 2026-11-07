@@ -24,7 +24,7 @@ function dayLine() {
 
 function weather(el, size) {
   const w = D.weatherConf(), d = cached();
-  if (!w) { el.append(h('div', { class: 'wg-empty' }, h('b', { text: '天气' }), h('span', { text: '去天气 App 里选个城市' }))); return; }
+  if (!w) { el.append(h('div', { class: 'wg-empty' }, h('b', { text: '天气' }))); return; }
   if (!d?.current) { getWeather().then(() => D.emit('weather')).catch(() => {}); el.append(h('div', { class: 'wg-empty' }, h('b', { text: w.name }), h('span', { text: '正在获取…' }))); return; }
   const [txt, kind] = describe(d.current.weather_code);
   const top = h('div', { class: 'wg-wx-top' },

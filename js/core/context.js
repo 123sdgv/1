@@ -1,22 +1,24 @@
 // 把数据拼成发给模型的 messages。提示词的文字都在 prompt.js，这里只管「拿哪些数据、拿多少」。
 import * as D from './data.js';
 import * as T from './prompt.js';
-import { partText } from './parse.js';
+import { partText, fwdText } from './parse.js';
 import { full, span, sep, ymd, hm, md } from './time.js';
 import { weatherLine } from './weather.js';
 
-const LIMIT = { memo: 40, recentDiaries: 3, diaryChars: 700, recall: 2, offlineChat: 12 };
+const LIMIT = { memo: 40, recentDiaries: 3, diaryChars: 700, recall: 2, offlineChat: 12, mails: 4, mailChars: 160, mailThread: 6 };
 
 const accOf = (c) => D.accounts().find((a) => a.id === c.acc) || D.curAccount();
 export const meName = (acc) => acc.name || '我';
 const whoName = (who, acc) => (who === 'me' ? meName(acc) : D.nameOf(D.charById(who)));
 
 function knowsOf(c) {
-  return (c.knows || []).map((id) => D.charById(id)).filter(Boolean).map((k) => ({ name: k.name || D.nameOf(k), net: k.net, persona: k.persona }));
+  return (c.knows || []).map((id) => D.charById(id)).filter(Boolean).map((k) => ({ name: k.name || D.nameOf(k), persona: k.persona }));
 }
+/** 他知不知道你的邮箱：你给他写过信，或者在聊天里把地址发给过他 */
+export const knowsMyMail = (c) => { const a = D.myAddr(accOf(c)); return !!a && c.knowMail === a; };
 export function identityOf(c) {
   const acc = accOf(c);
-  return T.identity({ c, me: meName(acc), acc, knows: knowsOf(c) });
+  return T.identity({ c, me: meName(acc), acc, knows: knowsOf(c), hisMail: D.charAddr(c), myMail: knowsMyMail(c) ? D.myAddr(acc) : '' });
 }
 
 // 关键词召回：最近几句话里出现了某篇旧日记的关键词，就把那篇带上
@@ -32,7 +34,12 @@ function recall(c, text, skipIds) {
 }
 const cut = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
 
-export function memoryOf(c, recentText = '') {
+// 一封信写成一行：谁写给谁、什么时候、主题、正文开头
+function mailLine(m, c, acc, chars = LIMIT.mailChars) {
+  const mine = m.box === 'sent' || (m.box === 'trash' && m.was === 'sent');
+  return `${sep(m.ts)} ${mine ? `${meName(acc)}写给你` : `你写给${meName(acc)}`}：《${m.subject || '无主题'}》${cut(m.body.replace(/\s+/g, ' '), chars)}`;
+}
+export function memoryOf(c, recentText = '', { mails = true } = {}) {
   const acc = accOf(c);
   const all = D.diaries(c.id);
   const recent = all.slice(-LIMIT.recentDiaries);
@@ -43,6 +50,7 @@ export function memoryOf(c, recentText = '') {
     memo: D.memos(c.id).slice(-LIMIT.memo).map((m) => m.text),
     recent: recent.map((d) => ({ date: d.date, text: cut(d.text, LIMIT.diaryChars) })),
     recalled: rec.map((d) => ({ date: d.date, text: cut(d.text, LIMIT.diaryChars) })),
+    mails: mails ? D.mailsWith(c.id).slice(-LIMIT.mails).map((m) => mailLine(m, c, acc)) : [],
   });
 }
 
@@ -99,12 +107,13 @@ export function buildChat(c, { extra = null, uptoId = null } = {}) {
   const prevTs = list.filter((r) => r.role !== 'note').slice(-2)[0]?.ts;
   const sys = T.chatSystem({
     c, me: meName(acc),
+    canMail: knowsMyMail(c),
     stickers: D.stickers().map((x) => x.name),
     identityText: identityOf(c),
     memoryText: memoryOf(c, lastUserText(list)),
     presentText: presentOf(c, prevTs),
   });
-  const msgs = [{ role: 'system', content: sys }, ...historyMsgs(list, acc, D.settings().histLen)];
+  const msgs = [{ role: 'system', content: sys }, ...historyMsgs(list, acc, D.genOf(c).histLen)];
   if (extra) msgs.push({ role: 'user', content: extra });
   if (msgs[msgs.length - 1].role !== 'user') msgs.push({ role: 'user', content: '（继续）' });
   return msgs;
@@ -115,21 +124,29 @@ export function awayExtra(c) {
   return T.awayAsk({ me: meName(acc), gapText: last ? span(Date.now() - last.ts) : '很久', timeText: full(Date.now()) });
 }
 
+/** 线下剧情用哪套模型参数：社交里的角色用他的，自己写的用这段故事的 */
+export const storyGen = (st) => (st.char ? D.genOf(D.charById(st.char)) : D.genOf(st.card || {}));
 /** 线下剧情 */
 export function buildOffline(st, { uptoId = null } = {}) {
-  const c = D.charById(st.char), acc = accOf(c);
   let list = D.storyMsgs(st.id);
   if (uptoId) { const i = list.findIndex((r) => r.id === uptoId); if (i >= 0) list = list.slice(0, i); }
-  const chat = D.msgs(c.id).slice(-LIMIT.offlineChat).map((r) => `${r.role === 'them' ? c.name : meName(acc)}：${D.partsOf(r).map(partText).join(' / ')}`).join('\n');
-  const sys = T.offlineSystem({
-    c, me: meName(acc), scene: st.scene,
-    identityText: identityOf(c),
-    memoryText: memoryOf(c, list.filter((r) => r.role === 'me').slice(-3).map((r) => D.partsOf(r).map(partText).join(' ')).join('\n')),
-    presentText: presentOf(c, 0),
-    recentChat: chat,
-  });
+  let sys;
+  if (st.char) {
+    const c = D.charById(st.char), acc = accOf(c);
+    const chat = D.msgs(c.id).slice(-LIMIT.offlineChat).map((r) => `${r.role === 'them' ? c.name : meName(acc)}：${D.partsOf(r).map(partText).join(' / ')}`).join('\n');
+    sys = T.offlineSystem({
+      c, me: meName(acc), scene: st.scene,
+      identityText: identityOf(c),
+      memoryText: memoryOf(c, list.filter((r) => r.role === 'me').slice(-3).map((r) => D.partsOf(r).map(partText).join(' ')).join('\n')),
+      presentText: presentOf(c, 0),
+      recentChat: chat,
+    });
+  } else {
+    const card = st.card || {}, me = card.meName || '我';
+    sys = T.offlineSystem({ c: { name: card.name || '他' }, me, scene: st.scene, standalone: true, identityText: T.cardIdentity({ card, me }) });
+  }
   const msgs = [{ role: 'system', content: sys }];
-  for (const r of list.slice(-30)) {
+  for (const r of list.slice(-storyGen(st).histLen)) {
     const text = D.partsOf(r).map(partText).join('\n');
     if (!text) continue;
     const role = r.role === 'them' ? 'assistant' : 'user';
@@ -148,6 +165,7 @@ export function diaryLog(c, since) {
   for (const st of D.stories().filter((s) => s.char === c.id)) {
     for (const r of D.storyMsgs(st.id)) if (r.ts > since) rows.push([r.ts, `${hm(r.ts)} 【见面·${st.title || '线下'}】${r.role === 'them' ? '' : me + '：'}${cut(D.partsOf(r).map(partText).join(' '), 600)}`]);
   }
+  for (const m of D.mailsWith(c.id)) if (m.ts > since) rows.push([m.ts, `${hm(m.ts)} 【邮件】${mailLine(m, c, acc, 500)}`]);
   rows.sort((a, b) => a[0] - b[0]);
   // 按天分段
   let day = '', out = [];
@@ -169,8 +187,9 @@ export function threadText(m) {
   const acc = D.accounts().find((a) => a.id === m.acc) || D.curAccount();
   const lines = [`${whoName(m.who, acc)}（${sep(m.ts)}）：${m.text}`];
   for (const p of m.photos || []) lines.push(`[图片] ${p}`);
+  if (m.fwd) lines.push(fwdText(m.fwd));
   if (m.likes?.length) lines.push(`点赞：${m.likes.map((w) => whoName(w, acc)).join('、')}`);
-  for (const cm of m.comments || []) lines.push(`${whoName(cm.who, acc)}${cm.to ? ' 回复 ' + whoName(cm.to, acc) : ''}：${cm.text}`);
+  for (const cm of m.comments || []) lines.push(`${whoName(cm.who, acc)}${cm.to ? ' 回复 ' + whoName(cm.to, acc) : ''}：${cm.text}${(cm.photos || []).map((p) => ` [图片] ${p}`).join('')}`);
   return lines.join('\n');
 }
 export function buildPost(c) {
@@ -184,6 +203,19 @@ export function buildReply(c, m, cm) {
   const acc = D.accounts().find((a) => a.id === m.acc) || D.curAccount();
   return [{ role: 'user', content: T.replyPrompt({ c, identityText: identityOf(c), memoryText: memoryOf(c, cm.text), presentText: presentOf(c, 0), thread: threadText(m), who: whoName(cm.who, acc), text: cm.text }) }];
 }
-export function buildProfile(c) {
-  return [{ role: 'user', content: T.profilePrompt({ c, identityText: identityOf(c) }) }];
+// ── 邮件 ──
+function mailThread(c, exceptId = null) {
+  const acc = accOf(c);
+  return D.mailsWith(c.id).filter((m) => m.id !== exceptId).slice(-LIMIT.mailThread).map((m) => mailLine(m, c, acc, 600)).join('\n');
+}
+export function buildMailName(c) {
+  return [{ role: 'user', content: T.mailNamePrompt({ c, identityText: identityOf(c) }) }];
+}
+export function buildMailReply(c, mail) {
+  const acc = accOf(c);
+  return [{ role: 'user', content: T.mailReplyPrompt({ c, me: meName(acc), identityText: identityOf(c), memoryText: memoryOf(c, mail.body, { mails: false }), presentText: presentOf(c, 0), thread: mailThread(c, mail.id), mail }) }];
+}
+export function buildMailWrite(c) {
+  const acc = accOf(c);
+  return [{ role: 'user', content: T.mailWritePrompt({ c, me: meName(acc), identityText: identityOf(c), memoryText: memoryOf(c, '', { mails: false }), presentText: presentOf(c, 0), thread: mailThread(c) }) }];
 }

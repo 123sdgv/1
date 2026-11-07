@@ -8,7 +8,7 @@ export function mount(body, { close, arg }) {
   const stack = new Stack(body, close);
   const { pg, draw } = charList(stack, {
     title: '备忘录',
-    sub: (c) => { const n = D.memos(c.id).length; return n ? `记得 ${n} 件事` : '还什么都不记得'; },
+    sub: (c) => { const n = D.memos(c.id).length; return n ? `记得 ${n} 件事` : ''; },
     open: (id) => openChar(id),
   });
   pg.el.classList.add('mm');
@@ -22,14 +22,14 @@ export function mount(body, { close, arg }) {
     const p = page({ title: D.nameOf(c), onBack: () => stack.pop(), right: btnIc('plus', () => add(), '记一条') });
     p.el.classList.add('mm');
     async function add() {
-      const v = await ask(`让${D.nameOf(c)}记住`, '', '比如：我不吃香菜', true);
+      const v = await ask(`让${D.nameOf(c)}记住`, '', '', true);
       if (v?.trim()) D.setMemos(cid, [...D.memos(cid), { id: D.uid(), text: v.trim(), ts: Date.now() }]);
     }
     const drawList = () => {
       p.scroll.innerHTML = '';
-      p.scroll.append(h('div', { class: 'mm-head' }, h('b', { text: `${D.nameOf(c)}记得的关于你的事` }), h('small', { text: '每次聊天都会带给他；他写日记时也会自己加、删。点一条可以改，长按删除。' })));
+      p.scroll.append(h('div', { class: 'mm-head' }, h('b', { text: `${D.nameOf(c)}记得的关于你的事` })));
       const ms = D.memos(cid);
-      if (!ms.length) { p.scroll.append(h('div', { class: 'empty', text: '还没有。聊过一阵、他写日记时会自己记；也可以点右上角替他记一条。' })); return; }
+      if (!ms.length) { p.scroll.append(h('div', { class: 'empty', text: '还没有' })); return; }
       const box = h('div', { class: 'mm-list' });
       ms.forEach((m, i) => {
         const it = h('button', { class: 'mm-it', onclick: async () => {
