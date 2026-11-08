@@ -197,7 +197,7 @@ export function openChat(ctx, cid, { at = null } = {}) {
       anchor = x.el;
       prevTs = r.ts;
     }
-    sub.textContent = CS.busy(cid) ? '对方正在输入…' : '';
+    sub.textContent = CS.isSearching(cid) ? '对方正在搜索…' : CS.busy(cid) ? '对方正在输入…' : '';
     pg.setTitle(D.nameOf(D.charById(cid)) || '');
     drawSend();
     if (sel) { const n = selected().length; delSel.disabled = fwdSel.disabled = !n; }
@@ -341,7 +341,8 @@ export function openChat(ctx, cid, { at = null } = {}) {
     sendParts([{ t: 'pay', amount: Math.round(n * 100) / 100, note: nt.value.trim(), state: 'wait' }]);
   }
 
-  const offs = [D.on('msgs', (id) => id === cid && draw()), D.on('typing', (id) => id === cid && draw()), D.on('chars', draw), D.on('account', draw), D.on('stickers', draw)];
+  const offs = [D.on('msgs', (id) => id === cid && draw()), D.on('typing', (id) => id === cid && draw()), D.on('chars', draw), D.on('account', draw), D.on('stickers', draw),
+    D.on('searchfail', (x) => x.cid === cid && toast('没搜成：' + x.msg))];
   ctx.push({ el: pg.el, onShow: () => CS.setViewing(cid), onHide: () => CS.setViewing(null), onDestroy: () => { CS.setViewing(null); offs.forEach((f) => f()); } });
   CS.setViewing(cid);
   // 从搜索点进来：翻到那条，闪一下

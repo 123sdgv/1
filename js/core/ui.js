@@ -84,6 +84,8 @@ const P = {
   undo: '<path d="M8.6 5 4.6 9l4 4"/><path d="M4.8 9h9.6a5 5 0 0 1 0 10H9"/>',
   inbox: '<path d="M4 13.4 6.6 5.8A1.6 1.6 0 0 1 8.1 4.8h7.8a1.6 1.6 0 0 1 1.5 1l2.6 7.6v4.6a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 18z"/><path d="M4 13.4h4.6l1.4 2.4h4l1.4-2.4H20"/>',
   mail: '<rect x="3.6" y="5.6" width="16.8" height="12.8" rx="2.2"/><path d="m4.4 7 7.6 6 7.6-6"/>',
+  pin: '<path d="M8.6 4.4h6.8M10.2 4.4v5.4l-3 3.6h9.6l-3-3.6V4.4M12 13.4v6.2"/>',
+  unpin: '<path d="M8.6 4.4h6.8M10.2 4.4v5.4l-3 3.6h9.6l-3-3.6V4.4M12 13.4v6.2"/><path d="m4.6 4.6 14.8 14.8"/>',
   compose: '<path d="M11 5H6.6A1.6 1.6 0 0 0 5 6.6v10.8A1.6 1.6 0 0 0 6.6 19h10.8a1.6 1.6 0 0 0 1.6-1.6V13"/><path d="M10 14l.6-2.8 6.6-6.6a1.4 1.4 0 0 1 2 2l-6.6 6.6z"/>',
 };
 export const icon = (name, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
@@ -267,9 +269,11 @@ export function dialog({ title, text, buttons = [['好', true, 'main']], input =
 export const confirm = (title, text, ok = '确定', danger = false) => dialog({ title, text, buttons: [['取消', false], [ok, true, danger ? 'danger' : 'main']] });
 export const ask = (title, value = '', placeholder = '', multi = false) => dialog({ title, input: { value, placeholder, multi }, buttons: [['取消', false], ['好', true, 'main']] });
 
-export function toast(text, ms = 2000) {
+/** 小提示。action = [文字, 回调]：后面带一个能点的按钮（比如「撤销」） */
+export function toast(text, ms = 2000, action = null) {
   const host = document.getElementById('toasts');
-  const t = h('div', { class: 'toast', text });
+  const t = h('div', { class: 'toast' + (action ? ' act' : ''), text });
+  if (action) t.append(h('button', { text: action[0], onclick: () => { t.remove(); action[1](); } }));
   host.append(t);
   requestAnimationFrame(() => t.classList.add('on'));
   setTimeout(() => { t.classList.remove('on'); setTimeout(() => t.remove(), 400); }, ms);
@@ -325,9 +329,12 @@ export function popbar(anchor, items, point = null) {
 // ── 左滑露出红色删除：滑开不删，点红色那块才删。一次只开一行，点别处收回 ──
 let swOpen = null;
 document.addEventListener('pointerdown', (e) => { if (swOpen && !swOpen.wrap.contains(e.target)) swOpen.close(); }, true);
-export function swipeRow(front, onDelete, label = '删除') {
+// 默认是红色删除；opt = { label, icon, cls } 可以换成别的（比如消息列表的蓝色置顶）
+export function swipeRow(front, onTap, opt = {}) {
+  if (typeof opt === 'string') opt = { label: opt };
+  const { label = '删除', icon: ic = 'trash', cls = '' } = opt;
   const W = 76;
-  const del = h('button', { class: 'sw-del', 'aria-label': label, html: icon('trash'), onclick: (e) => { e.stopPropagation(); close(); onDelete(); } });
+  const del = h('button', { class: 'sw-del ' + cls, 'aria-label': label, html: icon(ic), onclick: (e) => { e.stopPropagation(); close(); onTap(); } });
   front.classList.add('sw-front');
   const wrap = h('div', { class: 'sw-wrap' }, del, front);
   let id = null, x0 = 0, y0 = 0, base = 0, cur = 0, live = false, moved = false;

@@ -42,18 +42,29 @@ function banner({ cid, moment, diary, mail, text }) {
 }
 
 // 键盘弹出来时把整台手机缩到可见区域（iPhone 上 fixed 元素不会自己让开键盘）
+// 手机上：手机界面跟可视区域一样大；键盘弹起时缩到键盘上面。
+// 键盘检测跟「没键盘时的最高高度」比，不用 innerHeight（iOS 26 键盘弹起时 innerHeight 也跟着变小，老办法就测不出来了）。
+// iOS 26.1 以后「添加到主屏幕」打开时，屏幕最底下会空一条（系统画的，网页够不着，WebKit bug 301994），
+// 那条的颜色跟着网页底色走，所以开着 App 的时候底色用浅色（见 base.css 的 body.in-app）。
 function fitViewport() {
   const vv = window.visualViewport;
   if (!vv) return;
   const dev = $('#device');
+  let tall = 0, portrait = null;
   const apply = () => {
     if (innerWidth >= 620) { dev.style.height = ''; dev.style.top = ''; document.body.classList.remove('kb'); return; }
+    const p = innerHeight >= innerWidth;
+    if (p !== portrait) { portrait = p; tall = 0; }
+    const typing = !!document.activeElement?.matches?.('input, textarea, [contenteditable="true"]');
+    if (!typing) tall = Math.max(tall, vv.height, innerHeight);
+    document.body.classList.toggle('kb', typing && tall - vv.height > 120);
     dev.style.height = vv.height + 'px';
     dev.style.top = vv.offsetTop + 'px';
-    document.body.classList.toggle('kb', innerHeight - vv.height > 120);
   };
   vv.addEventListener('resize', apply);
   vv.addEventListener('scroll', apply);
+  addEventListener('focusin', () => setTimeout(apply, 60));
+  addEventListener('focusout', () => setTimeout(apply, 60));
   apply();
 }
 

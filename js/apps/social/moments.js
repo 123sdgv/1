@@ -131,13 +131,19 @@ export function momentsPane(ctx) {
       scheduleReplyTo(fresh, c);
       draw(true);
     } });
-    return h('div', { class: 'mo-cmt' },
+    // 键盘弹起后把整个评论框（含下面的按钮）滚到看得见：键盘升起、可视高度变了也再滚一次
+    const show = () => { if (box.isConnected && box.contains(document.activeElement)) box.scrollIntoView({ block: 'end' }); };
+    const onVV = () => setTimeout(show, 30);
+    ta.addEventListener('focus', () => { setTimeout(show, 380); visualViewport?.addEventListener('resize', onVV); });
+    ta.addEventListener('blur', () => visualViewport?.removeEventListener('resize', onVV));
+    const box = h('div', { class: 'mo-cmt' },
       cmt.to ? h('small', { class: 'mo-cmt-to', text: '回复 ' + whoOf(cmt.to).name }) : null,
       ta, strip,
       h('div', { class: 'mo-cmt-bar' },
         h('button', { 'aria-label': '从相册选', html: icon('photo'), onclick: () => pickFromAlbum((d) => { cmt.photos.push({ desc: d }); drawStrip(); }) }),
         h('button', { 'aria-label': '写一张', html: icon('camera'), onclick: () => { cmt.photos.push({ desc: '', live: true }); drawStrip(); requestAnimationFrame(() => strip.querySelector('.ph-live:last-of-type textarea')?.focus()); } }),
         h('span', { class: 'sp' }), send));
+    return box;
   }
 
   draw(true);

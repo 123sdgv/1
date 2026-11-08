@@ -6,7 +6,14 @@ import { hm } from '../../core/time.js';
 
 export function mount(body, { close }) {
   const stack = new Stack(body, close);
-  const pg = page({ title: '天气', left: h('span'), right: btnIc('search', () => pickCity(), '换城市') });
+  // 刷新：还是这个城市，按现在重新拿一遍。转圈的时候页面不清空
+  const refreshBtn = btnIc('redo', async () => {
+    if (!D.weatherConf() || refreshBtn.classList.contains('spin')) return;
+    refreshBtn.classList.add('spin');
+    const top = pg.scroll.scrollTop;
+    try { await getWeather(true); await draw(); pg.scroll.scrollTop = top; } catch (e) { toast(e.message); } finally { refreshBtn.classList.remove('spin'); }
+  }, '刷新');
+  const pg = page({ title: '天气', left: h('span'), right: [refreshBtn, btnIc('search', () => pickCity(), '换城市')] });
   pg.el.classList.add('wx');
   let loading = false;
   async function draw(force = false) {

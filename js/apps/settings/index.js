@@ -5,6 +5,7 @@ import { isLocked } from '../../phone/lock.js';
 import * as D from '../../core/data.js';
 import * as S from '../../core/store.js';
 import { testApi, listModels, endpoint } from '../../core/api.js';
+import { PROVIDERS, providerName, searchReady, webSearch } from '../../core/search.js';
 import { ymd } from '../../core/time.js';
 
 export function mount(body, { close }) {
@@ -57,7 +58,34 @@ export function mount(body, { close }) {
       } }));
     const hint = () => { const u = endpoint(v.base); result.textContent = u ? '实际请求：' + u : ''; };
     hint();
+    p.scroll.append(...searchPart());
     stack.push({ el: p.el });
+  }
+
+  // 搜索：选一家、填 Key。设好了角色聊天时能 [搜索 关键词] 查新消息
+  function searchPart() {
+    const sc = D.search();
+    const sv = { provider: sc.provider, key: sc.key };
+    const provRow = row({ label: '服务', value: providerName(sv.provider) || '不用', onclick: () => menu([
+      ...PROVIDERS.map(([id, name]) => [name, () => setProv(id)]),
+      ['不用', () => setProv('')],
+    ], '搜索服务') });
+    const setProv = (id) => { sv.provider = id; D.setSearch({ provider: id }); provRow.querySelector('.row-v').textContent = providerName(id) || '不用'; };
+    const res = h('p', { class: 'grp-note api-res' });
+    return [
+      group('搜索', provRow, inputRow({ label: 'Key', value: sv.key, type: 'password', onchange: (x) => { sv.key = x.trim(); D.setSearch({ key: sv.key }); } })),
+      res,
+      h('button', { class: 'btn wide', text: '测试搜索', onclick: async (e) => {
+        document.activeElement?.blur();
+        if (!searchReady()) { res.textContent = '先选服务、填 Key'; return; }
+        const b = e.currentTarget; b.disabled = true; b.textContent = '搜索中…';
+        res.textContent = '';
+        const t0 = Date.now();
+        try { const r = await webSearch('今天的新闻'); res.textContent = r.n ? `能用（${Date.now() - t0} 毫秒），搜到 ${r.n} 条` : '连上了，但什么都没搜到'; }
+        catch (err) { res.textContent = '没搜成：' + err.message; }
+        finally { b.disabled = false; b.textContent = '测试搜索'; }
+      } }),
+    ];
   }
 
   function passMenu() {

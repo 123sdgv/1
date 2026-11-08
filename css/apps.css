@@ -189,3 +189,6 @@
 .mc-send { width: 38px; height: 38px; margin-right: 4px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--ink); color: #fff; }
 .mc-send .ic { width: 19px; height: 19px; }
 .mc-send:active { transform: scale(.92); }
+/* 天气刷新转圈 */
+.ibtn.spin .ic { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

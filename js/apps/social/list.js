@@ -1,5 +1,6 @@
-// 消息列表：最上面是搜索框（搜聊天记录），下面这个身份下的每个角色一行，按最后一条消息排，置顶的在前
-import { h, avatar, menu, confirm, longPress, icon } from '../../core/ui.js';
+// 消息列表：最上面是搜索框（搜聊天记录），下面这个身份下的每个角色一行，按最后一条消息排。
+// 往左滑露出蓝色的置顶（再滑一次是取消置顶）；置顶的排在最前，先置顶的在上面
+import { h, avatar, icon, swipeRow } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { short } from '../../core/time.js';
 import { partPreview, partSearchText } from '../../core/parse.js';
@@ -62,21 +63,24 @@ export function listPane(ctx) {
     body.innerHTML = '';
     if (q) { drawResults(); return; }
     const rows = D.chars().map((c) => ({ c, m: D.meta(c.id), p: preview(c) }));
-    rows.sort((a, b) => (b.m.pinned - a.m.pinned) || ((b.p.ts || b.c.createdAt) - (a.p.ts || a.c.createdAt)));
+    const pinAt = (m) => (m.pinned === true ? 1 : +m.pinned || 0);
+    rows.sort((a, b) => {
+      const pa = pinAt(a.m), pb = pinAt(b.m);
+      if (!!pa !== !!pb) return pa ? -1 : 1;
+      if (pa) return pa - pb;
+      return (b.p.ts || b.c.createdAt) - (a.p.ts || a.c.createdAt);
+    });
     if (!rows.length) { body.append(h('div', { class: 'empty' }, h('b', { text: '还没有角色' }))); return; }
     for (const { c, m, p } of rows) {
       const typing = busy(c.id);
-      const row = h('button', { class: 'cl-row' + (m.pinned ? ' pinned' : ''), onclick: () => openChat(ctx, c.id) },
+      const pinned = !!pinAt(m);
+      const row = h('button', { class: 'cl-row' + (pinned ? ' pinned' : ''), onclick: () => openChat(ctx, c.id) },
         h('span', { class: 'cl-av' }, avatar(c.avatar, D.nameOf(c)), m.unread ? h('i', { class: 'badge', text: m.unread > 99 ? '99+' : m.unread }) : null),
         h('span', { class: 'cl-mid' },
           h('span', { class: 'cl-top' }, h('b', { text: D.nameOf(c) }), h('small', { text: p.ts ? short(p.ts) : '' })),
           h('span', { class: 'cl-sub' + (typing ? ' typing' : ''), text: typing ? '对方正在输入…' : p.text })));
-      longPress(row, () => menu([
-        [m.pinned ? '取消置顶' : '置顶', () => D.setMeta(c.id, { pinned: !m.pinned })],
-        [m.unread ? '标为已读' : '标为未读', () => D.setMeta(c.id, { unread: m.unread ? 0 : 1 })],
-        ['清空聊天记录', async () => { if (await confirm('清空聊天记录？', `和 ${D.nameOf(c)} 的聊天记录会全部删掉，日记和备忘录不受影响。`, '清空', true)) D.setMsgs(c.id, []); }, 'danger'],
-      ], D.nameOf(c)));
-      body.append(row);
+      body.append(swipeRow(row, () => D.setMeta(c.id, { pinned: pinned ? 0 : Date.now() }),
+        { label: pinned ? '取消置顶' : '置顶', icon: pinned ? 'unpin' : 'pin', cls: 'blue' }));
     }
   };
   function drawResults() {

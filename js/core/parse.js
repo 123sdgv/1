@@ -10,6 +10,7 @@
 //   [日程 2026-11-20] 事情   [日程 每年 11-20] 事情   —— 往日历里记一件事
 //   [动态] 内容                          —— 他发一条动态（不出现在聊天里）
 //   [邮件 主题] 另起几行写正文，最后 [/邮件]   —— 他给你发一封邮件（不出现在聊天里）
+//   [搜索 关键词]                         —— 他想查点东西（设了搜索才有）：搜完把结果给他，再接着回
 import { stickerByName } from './data.js';
 
 export const stripThink = (s) => String(s || '').replace(/<think>[\s\S]*?(<\/think>|$)/gi, '').replace(/^\s*<\/think>/i, '');
@@ -75,6 +76,7 @@ export function parseLine(line) {
     }
     if (/^(动态|发动态|说说)$/.test(tag)) return rest || arg ? { act: 'post', text: rest || arg } : null;
     if (/^(邮件|发邮件|写信|信)$/.test(tag)) return { act: 'mail', subject: arg.slice(0, 60), body: rest };
+    if (/^(搜索|搜|查|查一下|联网搜索)$/.test(tag)) { const q = (arg + ' ' + rest).trim(); return q ? { act: 'search', q: q.slice(0, 80) } : null; }
   }
   if (MAIL_END.test(s)) return null;
   return { t: 'text', text: s };

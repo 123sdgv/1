@@ -31,13 +31,25 @@ export function cardIdentity({ card, me }) {
 }
 
 /** 记忆部分：备忘录 + 最近日记 + 关键词想起来的旧日记 + 最近的邮件 */
-export function memory({ me, memo, recent, recalled, mails = [] }) {
+export function memory({ me, memo, recent, recalled = [], mails = [] }) {
   return join(
     memo.length ? sec(`你记得的关于${me}的事`, list(memo)) : '',
     recent.length ? sec('你最近写的日记', recent.map((d) => `${d.date}\n${d.text}`).join('\n\n')) : '',
-    recalled.length ? sec('你想起来的旧事', recalled.map((d) => `${d.date}\n${d.text}`).join('\n\n')) : '',
+    recalledText(recalled),
     mails.length ? sec(`你和${me}最近的邮件`, list(mails)) : '',
   );
+}
+export const recalledText = (recalled) => (recalled.length ? sec('你想起来的旧事', recalled.map((d) => `${d.date}\n${d.text}`).join('\n\n')) : '');
+/** 他最近在动态里做过的事（你不在的时候发的、评论的），聊天时让他记得 */
+export const activity = (lines) => (lines.length ? sec('你最近在动态里做的事', list(lines)) : '');
+
+/**
+ * 每次都会变的东西（时间、天气、日历、想起来的旧事、搜到的结果…）不放在最前面的系统提示里，
+ * 而是接在最后一条消息前面：前面那一大段（人设 + 聊天记录）每次都一样，接口的缓存才能命中，省钱。
+ */
+export function tail({ me, parts }) {
+  const body = join(...parts);
+  return body ? `（下面是系统给你的参考，不是${me}发的消息）\n${body}\n（参考到这里）` : '';
 }
 
 /** 「现在」：时间、离上次多久、天气、日历 */
@@ -51,12 +63,11 @@ export function present({ me, timeText, gapText, weather, events }) {
 }
 
 // ── 手机聊天 ──
-export function chatSystem({ c, me, identityText, memoryText, presentText, stickers, canMail }) {
+export function chatSystem({ c, me, identityText, memoryText, stickers, canMail, canSearch }) {
   return join(
     `你在扮演「${c.name}」，正在用手机上的聊天软件和${me}聊天。这是线上聊天，你们不在一起。`,
     identityText,
     memoryText,
-    presentText,
     sec('怎么回消息', `- 像真人用手机发消息：一行就是一条消息，一次回 1～5 条，长短随意，可以只回一个字，也可以不回应某句。
 - 不写动作、神态、心理描写，不用括号写旁白；想表达的都用说出来的话。
 - 需要的时候可以用下面这些格式，每个各占一行：
@@ -69,9 +80,18 @@ ${stickers.length ? `  [表情包 名字] —— 发一个表情包。只能用�
   [日程 YYYY-MM-DD] 事情 —— 往${me}的日历里记一件事；每年都有的（生日、纪念日）写 [日程 每年 MM-DD] 事情
   [动态] 内容 —— 在社交软件上发一条动态（${me}会在动态里看到，不会出现在聊天里），偶尔用
 ${canMail ? `  [邮件 主题] 然后另起几行写正文，最后单独一行写 [/邮件] —— 给${me}的邮箱发一封邮件（不会出现在聊天里），偶尔用，适合写长一点、正式一点的话
+` : ''}${canSearch ? `  [搜索 关键词] —— 想知道最近发生的事、实时的消息，或者拿不准的事实，就只回这一行、别的都先别写；系统会把搜到的东西给你，你看完再回${me}
 ` : ''}- ${me}发来的 [图片] 就是一张真照片，按看到这张照片来回应；[语音] 就是${me}说话的声音；[聊天记录] 是${me}转发给你的一段别人的聊天。
 - 不要写时间，不要写名字前缀，不要用其他格式。${stickers.length ? '' : '现在没有表情包可以发。'}`),
   );
+}
+/** 他搜了以后，把结果给他 */
+export function searchResult({ me, q, results, error, said }) {
+  return sec(`你刚搜了「${q}」`, join(
+    error ? `没搜成（${error}）。就按你自己知道的回${me}，别假装搜到了。` : results || '什么都没搜到。',
+    said ? `你这次已经发了：\n${said}\n接着往下说，别重复。` : '',
+    `现在直接回${me}，不要再搜。`,
+  ));
 }
 /** 在消息里标出时间（间隔久了才标） */
 export const stamp = (text) => `[${text}]`;
@@ -83,13 +103,12 @@ export function awayAsk({ me, gapText, timeText }) {
 
 // ── 线下 ──
 // standalone：线下里自己写的故事（不是社交里的角色），没有手机、没有现实里的时间天气
-export function offlineSystem({ c, me, identityText, memoryText, presentText, scene, recentChat, standalone = false }) {
+export function offlineSystem({ c, me, identityText, memoryText, scene, recentChat, standalone = false }) {
   return join(
     standalone ? `你在和${me}一起写一段故事：你扮演「${c.name}」，${me}扮演「${me}」。`
       : `你在和${me}一起写一段故事：你扮演「${c.name}」，${me}扮演自己。现在你们在线下见面，面对面。`,
     identityText,
     memoryText,
-    presentText,
     sec(standalone ? '开场' : '场景', scene),
     recentChat ? sec('你们最近在手机上聊的', recentChat) : '',
     sec('写法', `- 用第三人称小说的写法，写${c.name}的动作、神态、说的话、心里想的，以及周围的环境。

@@ -22,6 +22,7 @@ export function initLock(open) {
 
 export function lock() {
   locked = true;
+  document.body.classList.add('locked');
   const el = $('#lock');
   el.hidden = false;
   el.classList.remove('gone');
@@ -93,6 +94,7 @@ function unlock(then) {
 }
 function open() {
   locked = false;
+  document.body.classList.remove('locked');
   clearInterval(timer);
   const el = $('#lock');
   el.classList.add('gone');

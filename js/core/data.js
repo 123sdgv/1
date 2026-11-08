@@ -17,6 +17,12 @@ export const settings = () => ({ ...SETTINGS, ...S.get('settings', {}) });
 export function setSettings(patch) { S.set('settings', { ...S.get('settings', {}), ...patch }); emit('settings'); }
 
 export const api = () => ({ base: '', model: '', ...S.get('api', {}), key: S.get('secret.apiKey', '') });
+// 搜索：用哪家（tavily / bocha / jina / exa，空 = 不用），Key 跟 API Key 一样不跟着导出
+export const search = () => ({ provider: '', ...S.get('search', {}), key: S.get('secret.searchKey', '') });
+export function setSearch({ provider, key }) {
+  if (provider != null) S.set('search', { provider });
+  if (key != null) S.set('secret.searchKey', key);
+}
 export function setApi({ base, model, key }) {
   S.set('api', { base: base ?? api().base, model: model ?? api().model });
   if (key != null) S.set('secret.apiKey', key);
@@ -131,7 +137,8 @@ export function addMsg(cid, rec) {
 export const partsOf = (rec) => rec.alts?.[rec.cur || 0] || [];
 export function touchMsgs(cid) { S.touch('msgs.' + cid); emit('msgs', cid); }
 
-export const meta = (cid) => ({ unread: 0, pinned: false, lastTs: 0, ...(S.get('chatmeta', {})[cid] || {}) });
+// pinned：置顶的时间（越早置顶越靠前）；老存档里是 true，当成最早
+export const meta = (cid) => ({ unread: 0, pinned: 0, lastTs: 0, ...(S.get('chatmeta', {})[cid] || {}) });
 export function setMeta(cid, patch) {
   const all = S.get('chatmeta', {});
   all[cid] = { ...(all[cid] || {}), ...patch };
