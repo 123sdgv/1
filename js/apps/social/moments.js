@@ -1,7 +1,9 @@
 // 动态：像 QQ 空间的说说。你和角色都能发，能点赞、评论、楼中楼回复。
 // 评论不弹窗：点评论，帖子下面直接出一条横线输入框，能写长的，也能带图（图也是文字写的画面）。
+// 长按动态（名字、正文、转发的卡片）或里面的某张图：黑色小条 编辑 · 删除。你的和他的都能改。
+// 编辑是原地改：正文和每张图的文字都变成输入框，× 去掉那张图，打勾保存。
 // 角色的点赞评论不是马上出来：发完以后随机过几分钟，打开着的时候或下次打开时补上（见 core/life.js）
-import { h, avatar, icon, sheet, ask, toast, menu, longPress, autosize, confirm } from '../../core/ui.js';
+import { h, avatar, icon, sheet, ask, toast, menu, longPress, autosize, popbar } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { ago } from '../../core/time.js';
 import { scheduleMyPostReacts, scheduleReplyTo, tick } from '../../core/life.js';
@@ -21,9 +23,10 @@ function pickFromAlbum(onPick) {
 export function momentsPane(ctx) {
   const el = h('div', { class: 'so-pane scroll mo' });
   // 正在写的评论：{ mid, to, text, photos:[{ desc, live（自己现写的）}] }。写着的时候整页不重画，免得打断
-  let cmt = null, pending = false;
+  // 正在改的动态：{ mid, text, photos:[文字], focus（先点哪个框：-1 正文，数字 第几张图）}，也一样不重画
+  let cmt = null, edit = null, pending = false;
   const draw = (force) => {
-    if (cmt && !force) { pending = true; return; }
+    if ((cmt || edit) && !force) { pending = true; return; }
     pending = false;
     const a = D.curAccount();
     const top = el.scrollTop;
@@ -40,12 +43,25 @@ export function momentsPane(ctx) {
   function postEl(m) {
     const w = whoOf(m.who);
     const liked = m.likes.includes('me');
+    const editing = edit?.mid === m.id;
+    const name = h('b', { class: 'mo-name', text: w.name });
+    const text = !editing && m.text ? h('p', { class: 'mo-text', text: m.text }) : null;
+    const fwd = m.fwd ? fwdCard(m.fwd, 'mo-fwd') : null;
     const body = h('div', { class: 'mo-body' },
-      h('b', { class: 'mo-name', text: w.name }),
-      m.text ? h('p', { class: 'mo-text', text: m.text }) : null,
-      m.photos?.length ? h('div', { class: 'mo-photos n' + Math.min(m.photos.length, 3) }, m.photos.map((p) => photoTile(p, { onclick: () => viewPhoto({ desc: p, ts: m.ts, who: m.who }) }))) : null,
-      m.fwd ? fwdCard(m.fwd, 'mo-fwd') : null,
-      h('div', { class: 'mo-meta' }, h('small', { text: ago(m.ts) }),
+      name,
+      editing ? editEl(m) : [
+        text,
+        m.photos?.length ? h('div', { class: 'mo-photos n' + Math.min(m.photos.length, 3) }, m.photos.map((p, i) => {
+          const t = photoTile(p, { onclick: () => viewPhoto({ desc: p, ts: m.ts, who: m.who }) });
+          longPress(t, (e) => popbar(t, [
+            ['edit', () => startEdit(m, i), '编辑'],
+            ['trash', () => dropPhoto(m, i), '删除'],
+          ], { x: e.clientX, y: e.clientY }));
+          return t;
+        })) : null,
+      ],
+      fwd,
+      editing ? null : h('div', { class: 'mo-meta' }, h('small', { text: ago(m.ts) }),
         m.jobs?.length ? h('small', { class: 'mo-wait', text: '·' }) : null,
         h('span', { class: 'mo-acts' },
           h('button', { class: liked ? 'on' : '', 'aria-label': '赞', html: icon(liked ? 'heartf' : 'heart'), onclick: () => like(m) }),
@@ -65,11 +81,80 @@ export function momentsPane(ctx) {
       cmt?.mid === m.id ? cmtEl(m) : null);
     const card = h('article', { class: 'mo-post', 'data-id': m.id },
       h('button', { class: 'mo-av', onclick: () => w.c && editChar(ctx, w.c.id) }, avatar(w.avatar, w.name)), body);
-    if (m.who === 'me') {
-      const del = () => menu([['删除这条动态', async () => { if (await confirm('删除这条动态？', '', '删除', true)) { if (cmt?.mid === m.id) cmt = null; D.removeMoment(m.id); draw(true); } }, 'danger']]);
-      for (const x of body.querySelectorAll(':scope > .mo-name, :scope > .mo-text')) longPress(x, del);
+    // 长按名字、正文、转发的卡片：编辑 · 删除（你的和他的都行）
+    if (!editing) {
+      for (const x of [name, text, fwd]) if (x) longPress(x, (e) => popbar(x, [
+        ['edit', () => startEdit(m, -1), '编辑'],
+        ['trash', () => { if (cmt?.mid === m.id) cmt = null; D.removeMoment(m.id); draw(true); }, '删除'],
+      ], { x: e.clientX, y: e.clientY }));
     }
     return card;
+  }
+
+  // ── 原地改一条动态：正文、每张图的文字 ──
+  function startEdit(m, focus) {
+    const prev = edit && D.moments().find((x) => x.id === edit.mid);
+    cmt = null;
+    edit = { mid: m.id, text: m.text || '', photos: [...(m.photos || [])], focus };
+    if (prev && prev.id !== m.id) redrawPost(prev);
+    draw(true);
+  }
+  function endEdit(save) {
+    const m = edit && D.moments().find((x) => x.id === edit.mid);
+    if (save && m) {
+      const text = edit.text.trim(), photos = edit.photos.map((p) => p.trim()).filter(Boolean);
+      if (!text && !photos.length && !m.fwd) { toast('不能是空的'); return; }
+      m.text = text;
+      m.photos = photos;
+      edit = null;
+      D.saveMoment(m);
+    } else edit = null;
+    draw(true);
+  }
+  // 长按某张图 → 删除：只去掉这一张；什么都不剩了就整条删掉
+  function dropPhoto(m, i) {
+    const fresh = D.moments().find((x) => x.id === m.id);
+    if (!fresh) return;
+    fresh.photos = fresh.photos.filter((_, k) => k !== i);
+    if (!fresh.text && !fresh.photos.length && !fresh.fwd) { if (cmt?.mid === m.id) cmt = null; D.removeMoment(m.id); }
+    else D.saveMoment(fresh);
+    draw(true);
+  }
+  function editEl() {
+    const ta = h('textarea', { class: 'mo-cmt-in mo-ed-in', rows: 1 });
+    ta.value = edit.text;
+    ta.addEventListener('input', () => { edit.text = ta.value; });
+    autosize(ta, 320);
+    const strip = h('div', { class: 'mo-ed-ph' });
+    const drawStrip = () => {
+      strip.innerHTML = '';
+      strip.hidden = !edit.photos.length;
+      edit.photos.forEach((p, i) => {
+        const t = h('textarea', { class: 'ph-ed', rows: 4 });
+        t.value = p;
+        t.addEventListener('input', () => { edit.photos[i] = t.value; });
+        strip.append(h('div', { class: 'ph ph-live' }, t,
+          h('button', { class: 'ph-x', 'aria-label': '去掉', html: icon('close'), onclick: (e) => { e.stopPropagation(); edit.photos.splice(i, 1); drawStrip(); } })));
+      });
+    };
+    drawStrip();
+    // 键盘弹起后把整块（含下面的按钮）滚到看得见，跟写评论一样
+    const show = () => { if (box.isConnected && box.contains(document.activeElement)) box.scrollIntoView({ block: 'nearest' }); };
+    const onVV = () => setTimeout(show, 30);
+    const onFocus = () => { setTimeout(show, 380); visualViewport?.addEventListener('resize', onVV); };
+    const onBlur = () => visualViewport?.removeEventListener('resize', onVV);
+    for (const x of [ta, strip]) { x.addEventListener('focusin', onFocus); x.addEventListener('focusout', onBlur); }
+    const box = h('div', { class: 'mo-ed' }, ta, strip,
+      h('div', { class: 'os-ed-bar' },
+        h('button', { 'aria-label': '不改了', html: icon('close'), onclick: () => endEdit(false) }),
+        h('button', { class: 'ok', 'aria-label': '改好了', html: icon('check'), onclick: () => endEdit(true) })));
+    const f = edit.focus;
+    requestAnimationFrame(() => {
+      box.scrollIntoView({ block: 'nearest' });
+      const x = f >= 0 ? strip.querySelectorAll('.ph-ed')[f] : ta;
+      if (x) { x.focus({ preventScroll: true }); x.setSelectionRange?.(x.value.length, x.value.length); }
+    });
+    return box;
   }
   // 只重画一条（写评论时别的帖子点赞用）
   function redrawPost(m) {
@@ -81,16 +166,18 @@ export function momentsPane(ctx) {
     const i = m.likes.indexOf('me');
     if (i >= 0) m.likes.splice(i, 1); else m.likes.push('me');
     D.saveMoment(m);
-    if (cmt && cmt.mid !== m.id) redrawPost(m);
+    if ((cmt && cmt.mid !== m.id) || edit) redrawPost(m);
   }
 
   // ── 评论：帖子下面的横线输入框 ──
   function openCmt(m, to) {
     if (cmt && cmt.mid === m.id && cmt.to === to) { closeCmt(); return; }
     const prev = cmt && D.moments().find((x) => x.id === cmt.mid);
+    const wasEditing = !!edit;
+    edit = null;
     cmt = { mid: m.id, to, text: '', photos: [] };
-    if (prev && prev.id !== m.id) redrawPost(prev);
-    redrawPost(m);
+    if (wasEditing) draw(true);
+    else { if (prev && prev.id !== m.id) redrawPost(prev); redrawPost(m); }
     requestAnimationFrame(() => el.querySelector('.mo-cmt-in')?.focus());
   }
   function closeCmt() { cmt = null; draw(true); }
@@ -147,7 +234,7 @@ export function momentsPane(ctx) {
   }
 
   draw(true);
-  const offs = [D.on('moments', () => draw()), D.on('chars', () => draw()), D.on('account', () => { cmt = null; draw(true); })];
+  const offs = [D.on('moments', () => draw()), D.on('chars', () => draw()), D.on('account', () => { cmt = null; edit = null; draw(true); })];
   const iv = setInterval(() => { tick(); draw(); }, 30000);
   return { el, compose: () => composeMoment({ onPosted: () => { el.scrollTop = 0; } }), onShow: () => draw(), destroy: () => { offs.forEach((f) => f()); clearInterval(iv); } };
 }

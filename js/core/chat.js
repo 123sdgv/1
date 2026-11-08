@@ -48,6 +48,8 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
   delete rec.error;
   const ctrl = new AbortController();
   running.set(cid, ctrl);
+  // 他正在写的这条被你删了（或者聊天记录全删了）：停下，什么都不留、不发通知
+  const gone = () => !D.msgs(cid).includes(rec);
   D.touchMsgs(cid);
   D.emit('typing', cid);
   try {
@@ -60,6 +62,7 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
       text = await chat(C.buildChat(c, { extra, uptoId, skipId: regen ? null : rec.id, canSearch: canSearch && round === 0, search }), {
         signal: ctrl.signal, temperature: g.temperature, max_tokens: g.maxTokens,
         onDelta: (_, all) => {
+          if (gone()) { ctrl.abort(); return; }
           // 只把已经写完的整行变成气泡，正在写的那行先不出；写了 [搜索] 以后的都不出
           const lines = stripThink(all).split('\n');
           lines.pop();
@@ -90,6 +93,7 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
       catch (e) { if (ctrl.signal.aborted) throw e; search.error = e.message; D.emit('searchfail', { cid, msg: e.message }); }
       finally { searching.delete(cid); D.emit('typing', cid); }
     }
+    if (gone()) return null;
     if (!before.length && !acts0.length && !away) throw new Error('这次回复是空的');
     rec.alts[rec.cur] = before;
     finish(c, rec, acts0);
@@ -107,7 +111,7 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
     D.touchMsgs(cid);
     D.emit('typing', cid);
     // 他回的时候你又发了消息：接着回你后来说的
-    if (!ctrl.signal.aborted && !rec.error && !away && D.partsOf(rec).length && lastIsMe(cid)) autoReply(cid, 1200);
+    if (!ctrl.signal.aborted && !gone() && !rec.error && !away && D.partsOf(rec).length && lastIsMe(cid)) autoReply(cid, 1200);
   }
 }
 
@@ -172,6 +176,37 @@ function finish(c, rec, acts) {
 }
 
 export function note(cid, text) { return D.addMsg(cid, { role: 'note', alts: [[{ t: 'note', text }]] }); }
+
+// ── 删聊天记录 ──
+// 删掉的就从记录里没了，他下次回复时看到的上文里也就没有这段（上文每次都是从记录现拼的，见 context.js）。
+/**
+ * 删一部分：drop(记录, 第几个部件) 为 true 的删掉。
+ * 一条整个删光了，紧跟在它后面的系统小字（「已收下转账」「发布了一条新动态」这种）也一起删，不留在上文里。
+ */
+export function removeParts(cid, drop) {
+  const left = [];
+  let goneBefore = false;
+  for (const r of D.msgs(cid)) {
+    if (r.role === 'note') { if (!goneBefore) left.push(r); continue; }
+    const parts = D.partsOf(r);
+    const keep = parts.filter((_, i) => !drop(r, i));
+    const cut = keep.length !== parts.length;
+    // 删光了就整条去掉；他正在写的那条，删了其中一个就整条去掉（他也就停下了）
+    goneBefore = cut && (!keep.length || !!r.pending);
+    if (goneBefore) continue;
+    if (cut) r.alts[r.cur || 0] = keep;
+    left.push(r);
+  }
+  D.setMsgs(cid, left);
+}
+/** 全删（日记、备忘录不动）。他正在回的那条也停下 */
+export function clearChat(cid) {
+  clearTimeout(autoT.get(cid));
+  autoT.delete(cid);
+  D.setMsgs(cid, []);
+  stop(cid);
+  D.setMeta(cid, { unread: 0 });
+}
 
 /** 你发一条（可以是几个部件）。发完他会自动回 */
 export function send(cid, parts) {

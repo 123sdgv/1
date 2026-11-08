@@ -3,6 +3,7 @@ import { h, page, avatar, group, row, inputRow, areaRow, toast, confirm, stepRow
 import { pickCrop } from '../../core/crop.js';
 import * as D from '../../core/data.js';
 import { openApp } from '../../phone/window.js';
+import * as CS from '../../core/chat.js';
 
 /** 模型参数的三根滑条（线下自己写的故事也用这个） */
 export function genRows(g) {
@@ -50,14 +51,8 @@ export function editChar(ctx, cid) {
         row({ label: '他记得的关于你的事', icon: 'note', onclick: () => openApp('memo', { char: c.id }) }),
         row({ label: '线下见面', icon: 'door', onclick: () => { const st = D.storiesOf().find((s) => s.char === c.id); openApp('offline', st ? { story: st.id } : { newFor: c.id }); } })) : null,
       !isNew ? group('',
-        // 只删聊天记录，日记、备忘录都留着（要删去它们自己的页面里删）。不弹窗，删完给几秒撤销
-        row({ label: '删除聊天记录', cls: 'danger center', chev: false, onclick: () => {
-          const old = D.msgs(c.id);
-          if (!old.length) { toast('没有聊天记录'); return; }
-          D.setMsgs(c.id, []);
-          D.setMeta(c.id, { unread: 0 });
-          toast('删了', 4000, ['撤销', () => D.setMsgs(c.id, old)]);
-        } }),
+        // 只删聊天记录，日记、备忘录都留着（要删去它们自己的页面里删）。点了直接删，不弹窗、不给撤销；删完这一行就没了
+        D.msgs(c.id).length ? row({ label: '删除聊天记录', cls: 'danger center', chev: false, onclick: (e) => { CS.clearChat(c.id); e.currentTarget.remove(); } }) : null,
         row({ label: '删除这个角色', cls: 'danger center', chev: false, onclick: async () => {
         if (!(await confirm('删除角色？', `${D.nameOf(c)} 的聊天、日记、备忘录、动态、线下剧情都会一起删掉，不能恢复。`, '删除', true))) return;
         D.removeChar(c.id);

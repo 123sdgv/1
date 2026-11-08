@@ -181,7 +181,8 @@
 .mo-av .av { width: 42px; height: 42px; border-radius: 8px; }
 .mo-body { flex: 1; min-width: 0; }
 .mo-name { display: block; font-size: 15.5px; font-weight: 600; }
-.mo-text { margin-top: 3px; font-size: 15.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text; }
+.mo-text { margin-top: 3px; font-size: 15.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; -webkit-touch-callout: none; }
+.mo-name.pressed, .mo-text.pressed { filter: none; background: rgba(0,0,0,.06); border-radius: 4px; }
 .mo-photos { display: grid; gap: 4px; margin-top: 8px; max-width: 260px; }
 .mo-photos.n1 { grid-template-columns: 1fr; max-width: 190px; }
 .mo-photos.n2 { grid-template-columns: 1fr 1fr; max-width: 230px; }
@@ -227,6 +228,12 @@
 .mo-fwd-box { position: relative; display: inline-block; margin: 4px 0 12px; }
 .mo-fwd-box .mo-fwd { margin: 0; width: 260px; }
 .mo-fwd-box .ph-x { top: 6px; right: 6px; }
+/* 原地改一条动态：正文一条横线，图两列、每张都是输入框 */
+.mo-ed { margin-top: 2px; scroll-margin-bottom: 14px; }
+.mo-ed-ph { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; max-width: 260px; }
+.mo-ed-ph .ph { aspect-ratio: 1; border-radius: 6px; }
+.mo-ed-ph .ph-ed { font-size: 12.5px; }
+.mo-ed .os-ed-bar { margin-top: 10px; }
 .mo-compose { padding: 0 16px; }
 .mo-ta { width: 100%; border: 0; outline: 0; background: none; resize: none; font-size: 17px; line-height: 1.6; min-height: 120px; }
 .mo-photos.edit { max-width: none; margin: 8px 0 22px; }

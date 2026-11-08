@@ -195,9 +195,9 @@ export function mailReplyPrompt({ c, me, identityText, memoryText, presentText, 
     presentText,
     thread ? sec(`你和${me}之前的邮件`, thread) : '',
     sec(`${me}刚给你发来的邮件`, `主题：${mail.subject || '（无主题）'}\n${mail.body}`),
-    `你会回这封邮件吗？用你自己的语气写。邮件可以比聊天长、比聊天正式一点，也可以很短。
+    `给${me}回这封邮件，用你自己的语气写。邮件可以比聊天长、比聊天正式一点，也可以很短。
 只输出一个 JSON，不要任何别的文字：
-{"reply": true 或 false, "subject": "主题，一般是 Re: 原来的主题", "body": "正文，可以分段"}`,
+{"subject": "主题，一般是 Re: 原来的主题", "body": "正文，可以分段"}`,
   );
 }
 /** 他自己想给你写一封信 */

@@ -3,7 +3,7 @@
 import * as D from './data.js';
 import { chat } from './api.js';
 import * as C from './context.js';
-import { parseJSON } from './parse.js';
+import { parseJSON, stripThink } from './parse.js';
 
 const MIN = 60000, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -54,14 +54,18 @@ export async function makeMailName(c) {
   return fresh;
 }
 
+// 你写给他的信他一定回：模型没按 JSON 写就把整段当正文；出错了（连不上、对方报错）过一会儿再试，直到回成
 async function replyJob(job) {
   const c = D.charById(job.who);
   const mine = D.mails().find((m) => m.id === job.mail);
-  if (!c || !mine || !D.charAddr(c)) return;
-  const j = parseJSON(await ask(c, C.buildMailReply(c, mine), 1500));
-  if (!j || j.reply === false || !String(j.body || '').trim()) return;
-  const subject = String(j.subject || '').trim() || (/^re[:：]/i.test(mine.subject) ? mine.subject : 'Re: ' + (mine.subject || ''));
-  charMail(c, { subject, body: j.body });
+  if (!c || !mine) return;
+  const raw = await ask(c, C.buildMailReply(c, mine), 1500);
+  const j = parseJSON(raw);
+  let body = String(j?.body || '').trim();
+  if (!body && !j) body = stripThink(raw).replace(/^```\w*\s*|```\s*$/g, '').trim();
+  if (!body) throw new Error('这次回信是空的');
+  const subject = String(j?.subject || '').trim() || (/^re[:：]/i.test(mine.subject) ? mine.subject : 'Re: ' + (mine.subject || ''));
+  charMail(c, { subject, body });
 }
 async function writeJob(c) {
   const j = parseJSON(await ask(c, C.buildMailWrite(c), 1500));
@@ -69,23 +73,31 @@ async function writeJob(c) {
   charMail(c, { subject: j.subject, body: j.body });
 }
 
-/** 补算：起邮箱名、到时间的回信、他自己写信。一次最多做一件费时的事 */
+/** 补算：到时间的回信、起邮箱名、他自己写信。一次最多做一件费时的事 */
 export async function mailTick({ inQuiet }) {
   const list = D.chars();
+  // 回信：你写给他的信一定回，「别打扰的时间」也不挡（那是管他主动找你的）
+  D.setMailJobs(D.mailJobs().filter((j) => D.charById(j.who) && D.mails().some((m) => m.id === j.mail)));
+  const due = D.mailJobs().find((j) => j.due <= Date.now());
+  if (due) {
+    try {
+      await replyJob(due);
+      D.setMailJobs(D.mailJobs().filter((j) => j !== due));
+    } catch (e) {
+      console.warn('回信', e.message);
+      // 没回成：留着，过一会儿再试（越往后隔得越久，最多一小时）
+      const tries = (due.tries || 0) + 1;
+      D.setMailJobs(D.mailJobs().map((j) => (j === due ? { ...j, tries, due: Date.now() + Math.min(60, 2 * 2 ** Math.min(tries, 5)) * MIN } : j)));
+      if (e.kind === 'config' || e.kind === 'network') throw e;
+    }
+    return;
+  }
   // 还没有邮箱的，起一个（没起成的隔一小时再试）
   for (const c of list) {
     if (c.mail || !c.name || Date.now() - (c.mailTried || 0) < HOUR) continue;
     await makeMailName(c).catch((e) => { console.warn('邮箱名', e.message); if (e.kind === 'config' || e.kind === 'network') throw e; });
     return;
   }
-  // 回信
-  const due = D.mailJobs().find((j) => j.due <= Date.now() && D.charById(j.who) && !inQuiet(D.lifeOf(D.charById(j.who))));
-  if (due) {
-    D.setMailJobs(D.mailJobs().filter((j) => j !== due));
-    await replyJob(due).catch((e) => { console.warn('回信', e.message); if (e.kind === 'config' || e.kind === 'network') throw e; });
-    return;
-  }
-  D.setMailJobs(D.mailJobs().filter((j) => D.charById(j.who)));
   // 自己写信：知道你的邮箱、打开了「自己写信」、到时间了
   for (const c of list) {
     const L = D.lifeOf(c);

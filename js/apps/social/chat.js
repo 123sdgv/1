@@ -137,16 +137,7 @@ export function openChat(ctx, cid, { at = null } = {}) {
     if (!items.length) return;
     if (!(await confirm(`删除 ${items.length} 条？`, '', '删除', true))) return;
     const drop = new Set(items.map((x) => keyOf(x.r, x.i)));
-    const left = [];
-    for (const r of D.msgs(cid)) {
-      if (r.role === 'note') { left.push(r); continue; }
-      const parts = D.partsOf(r);
-      const keep = parts.filter((_, i) => !drop.has(keyOf(r, i)));
-      if (!keep.length) continue;
-      if (keep.length !== parts.length) r.alts[r.cur || 0] = keep;
-      left.push(r);
-    }
-    D.setMsgs(cid, left);
+    CS.removeParts(cid, (r, i) => drop.has(keyOf(r, i)));
     setSel(null);
   }
   function forwardSel() {
@@ -279,11 +270,7 @@ export function openChat(ctx, cid, { at = null } = {}) {
       ['quote', () => { if (editing) endEdit(false); setQuote({ who: r.role === 'me' ? 'me' : 'them', text: quoteText(p) }); ta.focus(); }, '引用'],
       ['text', 'voice', 'photo'].includes(p.t) ? ['edit', () => startEdit(r, i), '编辑'] : null,
       isLast ? ['redo', () => regen(), '重新回复'] : null,
-      ['trash', () => {
-        const parts = D.partsOf(r);
-        parts.splice(i, 1);
-        if (!parts.length) D.setMsgs(cid, D.msgs(cid).filter((x) => x.id !== r.id)); else D.touchMsgs(cid);
-      }, '删除'],
+      ['trash', () => CS.removeParts(cid, (x, k) => x === r && k === i), '删除'],
       ['multi', () => setSel(new Set([keyOf(r, i)])), '多选'],
     ], e ? { x: e.clientX, y: e.clientY } : null);
   }
