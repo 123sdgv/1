@@ -87,6 +87,9 @@ const P = {
   pin: '<path d="M8.6 4.4h6.8M10.2 4.4v5.4l-3 3.6h9.6l-3-3.6V4.4M12 13.4v6.2"/>',
   unpin: '<path d="M8.6 4.4h6.8M10.2 4.4v5.4l-3 3.6h9.6l-3-3.6V4.4M12 13.4v6.2"/><path d="m4.6 4.6 14.8 14.8"/>',
   compose: '<path d="M11 5H6.6A1.6 1.6 0 0 0 5 6.6v10.8A1.6 1.6 0 0 0 6.6 19h10.8a1.6 1.6 0 0 0 1.6-1.6V13"/><path d="M10 14l.6-2.8 6.6-6.6a1.4 1.4 0 0 1 2 2l-6.6 6.6z"/>',
+  toc: '<path d="M9 7h10.4M9 12h10.4M9 17h10.4"/><circle cx="5" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="17" r="1" fill="currentColor" stroke="none"/>',
+  fileIn: '<path d="M7 3.8h7l4 4v11.4a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.8a1 1 0 0 1 1-1z"/><path d="M13.6 4v4.2h4.2"/><path d="M12 10.6v6.2M9.4 14.2 12 16.8l2.6-2.6"/>',
+  aa: '<path d="M3.6 18.4 8.4 5.8l4.8 12.6M5.4 14h6"/><circle cx="17.6" cy="15.7" r="2.7"/><path d="M20.3 12.2v6.2"/>',
 };
 export const icon = (name, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 export const ic = (name, cls) => h('span', { class: 'ico', html: icon(name, cls) });

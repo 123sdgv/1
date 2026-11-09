@@ -22,18 +22,19 @@ function walls() {
 }
 
 // 顶部横幅：不在那个对话里时，来消息了从上面滑下来
-function banner({ cid, moment, diary, mail, text }) {
+function banner({ cid, moment, diary, mail, book, ch, who, text }) {
   if (isLocked()) return;
   if (cid && isViewing(cid)) return;
   if (diary && currentApp() === 'diary') return;
   if (moment && currentApp() === 'social') return;
   if (mail && currentApp() === 'mail') return;
-  const c = cid ? D.charById(cid) : null;
-  const app = cid || moment ? 'social' : diary ? 'diary' : mail ? 'mail' : null;
+  if (book && currentApp() === 'read') return; // 在阅读里：段尾的气泡自己会变
+  const c = cid ? D.charById(cid) : book && who ? D.charById(who) : null;
+  const app = cid || moment ? 'social' : diary ? 'diary' : mail ? 'mail' : book ? 'read' : null;
   const el = h('button', { class: 'banner' },
     c ? avatar(c.avatar, D.nameOf(c), 'sm') : h('span', { class: 'banner-ic', html: appIcon(app || 'social') }),
-    h('div', {}, h('b', { text: c ? D.nameOf(c) : moment ? '动态' : mail ? '邮箱' : '日记' }), h('p', { text })));
-  const go = () => { dismiss(); if (cid) openApp('social', { chat: cid }); else if (moment) openApp('social', { tab: 'moments' }); else if (diary) openApp('diary', { char: diary }); else if (mail) openApp('mail', { mail }); };
+    h('div', {}, h('b', { text: c ? D.nameOf(c) : moment ? '动态' : mail ? '邮箱' : book ? '阅读' : '日记' }), h('p', { text })));
+  const go = () => { dismiss(); if (cid) openApp('social', { chat: cid }); else if (moment) openApp('social', { tab: 'moments' }); else if (diary) openApp('diary', { char: diary }); else if (mail) openApp('mail', { mail }); else if (book) openApp('read', { book, ch }); };
   el.addEventListener('click', go);
   $('#banners').append(el);
   requestAnimationFrame(() => el.classList.add('on'));

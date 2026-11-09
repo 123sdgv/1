@@ -21,6 +21,15 @@ export function viewPhoto(p) {
     p.ts ? h('p', { class: 'ph-meta', text: `${who} · ${md(p.ts)} ${hm(p.ts)}` }) : null) });
 }
 
+/** 书的封面：按书名算一个固定的深灰，书名竖着写。mini = 小图不写字；kids = 叠在封面上的东西（比如一起读的人的头像） */
+export function bookCover(title, cls = '', { mini = false, kids = null } = {}) {
+  let x = 7;
+  for (const ch of String(title)) x = (x * 31 + ch.charCodeAt(0)) >>> 0;
+  const a = 26 + (x % 22), b = 8 + ((x >> 7) % 12), ang = 150 + ((x >> 14) % 60);
+  return h('div', { class: 'bk-cv ' + cls, style: { background: `linear-gradient(${ang}deg, hsl(0 0% ${a}%), hsl(0 0% ${b}%))` } },
+    mini ? null : h('span', { class: 'bk-cv-t', text: title }), kids);
+}
+
 /** 选一个角色（当前账号） */
 export function pickChar(title, onPick, filter = () => true) {
   const list = D.chars().filter(filter);

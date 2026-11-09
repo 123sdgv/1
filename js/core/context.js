@@ -157,6 +157,7 @@ export function buildChat(c, { extra = null, uptoId = null, skipId = null, canSe
     canMail: knowsMyMail(c),
     canSearch: canSearch && !search,
     stickers: D.stickers().map((x) => x.name),
+    canBook: D.booksReadBy(c.id).length > 0,
     identityText: identityOf(c),
     memoryText: memoryOf(c, '', { withRecall: false }),
   });
@@ -166,6 +167,7 @@ export function buildChat(c, { extra = null, uptoId = null, skipId = null, canSe
     presentOf(c, prevTs),
     T.recalledText(recalledOf(c, lastUserText(list))),
     T.activity(activityOf(c)),
+    T.reading(readingOf(c)),
     search ? T.searchResult({ me, ...search }) : '',
   ] }));
 }
@@ -214,6 +216,16 @@ export function diaryLog(c, since) {
     for (const r of D.storyMsgs(st.id)) if (r.ts > since) rows.push([r.ts, `${hm(r.ts)} 【见面·${st.title || '线下'}】${r.role === 'them' ? '' : me + '：'}${cut(D.partsOf(r).map(partText).join(' '), 600)}`]);
   }
   for (const m of D.mailsWith(c.id)) if (m.ts > since) rows.push([m.ts, `${hm(m.ts)} 【邮件】${mailLine(m, c, acc, 500)}`]);
+  // 一起读书时你们写的段评
+  for (const b of D.booksReadBy(c.id)) {
+    const chs = D.chapters(b.id), all = D.bookCmts(b.id);
+    for (const x of all) {
+      if (x.ts <= since || (x.who !== 'me' && x.who !== c.id)) continue;
+      const to = x.to && all.find((y) => y.id === x.to);
+      const n = chs.findIndex((ch) => ch.id === x.ch) + 1;
+      rows.push([x.ts, `${hm(x.ts)} 【读书·《${b.title}》第 ${n} 章段评】${x.who === 'me' ? me : c.name}${to ? ' 回复 ' + (to.who === 'me' ? me : to.who === c.id ? c.name : D.nameOf(D.charById(to.who))) : ''}：${cut(x.text, 200)}`]);
+    }
+  }
   rows.sort((a, b) => a[0] - b[0]);
   // 按天分段
   let day = '', out = [];
@@ -267,4 +279,120 @@ export function buildMailReply(c, mail) {
 export function buildMailWrite(c) {
   const acc = accOf(c);
   return [{ role: 'user', content: T.mailWritePrompt({ c, me: meName(acc), identityText: identityOf(c), memoryText: memoryOf(c, '', { mails: false }), presentText: presentOf(c, 0), thread: mailThread(c) }) }];
+}
+
+// ── 阅读（一起读书）──
+// 他一次只读一章；太长的章按字数分成几部分，一次读一部分。前面读过的不再给原文，只给他自己写的读书笔记。
+const READ = { chunk: 7000, notes: 6000, reviewNotes: 9000, others: 40, para: 600, talk: 50, otherTalk: 30 };
+const accOfBook = (b) => D.accounts().find((a) => a.id === b.acc) || D.curAccount();
+/** 段评是谁写的，从 c 的角度看：你自己 / 你 / 认识的人 / 不认识的人 */
+function readerLabel(who, c, acc) {
+  if (who === 'me') return meName(acc);
+  if (who === c.id) return '你自己';
+  const o = D.charById(who);
+  if (!o) return '一个读者';
+  const n = o.name || D.nameOf(o);
+  return (c.knows || []).includes(who) ? `${n}（你认识）` : `${n}（你不认识这个人）`;
+}
+/** 一章分成几部分：[[段的下标…], …]，每部分不超过 READ.chunk 字 */
+export function chunksOf(ch) {
+  const out = [];
+  let cur = [], n = 0;
+  (ch?.paras || []).forEach((p, i) => {
+    if (cur.length && n + p.text.length > READ.chunk) { out.push(cur); cur = []; n = 0; }
+    cur.push(i); n += p.text.length;
+  });
+  if (cur.length) out.push(cur);
+  return out.length ? out : [[]];
+}
+const chTitle = (ch, i) => `第 ${i + 1} 章${ch.title ? ' ' + ch.title : ''}`;
+/** 读书笔记：按章的顺序，太长了从前面开始裁 */
+function notesText(rd, chs, upto, max) {
+  const rows = [];
+  chs.forEach((ch, i) => { if (i < upto && rd.notes?.[ch.id]) rows.push(`${chTitle(ch, i)}：${rd.notes[ch.id]}`); });
+  let out = rows.join('\n'), cutHead = false;
+  while (out.length > max && rows.length > 1) { rows.shift(); out = rows.join('\n'); cutHead = true; }
+  return (cutHead ? '（更早的笔记记不太清了）\n' : '') + cut(out, max);
+}
+
+/** 读一章（第 k 部分）。返回 { msgs, nums }：nums[编号] = 段评 id，他回复时按编号找 */
+export function buildReadChapter(c, b, chIdx, k) {
+  const acc = accOfBook(b), me = meName(acc);
+  const chs = D.chapters(b.id), ch = chs[chIdx];
+  const rd = D.readers(b.id)[c.id] || {};
+  const parts = chunksOf(ch);
+  const idx = parts[k] || [];
+  const text = idx.map((i) => `[${i + 1}] ${ch.paras[i].text}`).join('\n');
+  let notes = notesText(rd, chs, chIdx, READ.notes);
+  if (k > 0 && rd.notes?.[ch.id]) notes += `\n${chTitle(ch, chIdx)}（前面的部分）：${rd.notes[ch.id]}`;
+  // 这一章已经有的段评（最近 40 条），编上号
+  const pIdx = new Map(ch.paras.map((p, i) => [p.id, i]));
+  const all = D.bookCmts(b.id).filter((x) => x.ch === ch.id && pIdx.has(x.p)).sort((a, z) => a.ts - z.ts).slice(-READ.others);
+  const nums = {}, numOf = {};
+  const others = all.map((x, i) => {
+    nums[i + 1] = x.id; numOf[x.id] = i + 1;
+    const to = x.to ? (numOf[x.to] ? ` 回复 #${numOf[x.to]}` : ' 回复别人') : '';
+    return `#${i + 1}${to}（第 ${pIdx.get(x.p) + 1} 段）${readerLabel(x.who, c, acc)}：${x.text}`;
+  }).join('\n');
+  return {
+    nums,
+    msgs: [{ role: 'user', content: T.readChapterPrompt({
+      c, me, title: b.title, chNo: chIdx + 1, chTitle: ch.title, part: k + 1, parts: parts.length,
+      identityText: identityOf(c), memoryText: memoryOf(c, '', { mails: false, withRecall: false }),
+      notes: notes.trim(), text, others,
+    }) }],
+  };
+}
+
+/** 一段下面的段评（楼里的都算上） */
+function paraThread(b, cm, c, acc) {
+  const all = D.bookCmts(b.id).filter((x) => x.ch === cm.ch && x.p === cm.p).sort((a, z) => a.ts - z.ts);
+  const byId = new Map(all.map((x) => [x.id, x]));
+  return all.map((x) => `${readerLabel(x.who, c, acc)}${x.to && byId.get(x.to) ? ' 回复 ' + readerLabel(byId.get(x.to).who, c, acc) : ''}：${x.text}`).join('\n');
+}
+/** 有人回了他 / 你在他读过的段落写了段评 */
+export function buildReadReply(c, b, cm, kind) {
+  const acc = accOfBook(b), me = meName(acc);
+  const chs = D.chapters(b.id), chIdx = chs.findIndex((x) => x.id === cm.ch);
+  const para = chs[chIdx]?.paras.find((p) => p.id === cm.p)?.text || '';
+  return [{ role: 'user', content: T.readReplyPrompt({
+    c, me, title: b.title, chNo: chIdx + 1, para: cut(para, READ.para), thread: paraThread(b, cm, c, acc),
+    who: cm.who === 'me' ? me : readerLabel(cm.who, c, acc).replace(/（.*）$/, ''), text: cm.text, kind,
+    identityText: identityOf(c), memoryText: memoryOf(c, cm.text, { mails: false }),
+  }) }];
+}
+
+/** 整本读完：阅读日记 */
+export function buildReadReview(c, b) {
+  const acc = accOfBook(b), me = meName(acc);
+  const chs = D.chapters(b.id), rd = D.readers(b.id)[c.id] || {};
+  const all = D.bookCmts(b.id).sort((a, z) => a.ts - z.ts);
+  const byId = new Map(all.map((x) => [x.id, x]));
+  const chNo = (x) => chs.findIndex((ch) => ch.id === x.ch) + 1;
+  const line = (x) => {
+    const to = x.to && byId.get(x.to);
+    return `第 ${chNo(x)} 章 ${readerLabel(x.who, c, acc)}${to ? ' 回复 ' + readerLabel(to.who, c, acc) : ''}：${cut(x.text, 160)}`;
+  };
+  // 你和他之间的：你写的、他写的（他回别人的不算）
+  const talk = all.filter((x) => x.who === 'me' || (x.who === c.id && (!x.to || byId.get(x.to)?.who === 'me' || !byId.get(x.to)))).slice(-READ.talk).map(line).join('\n');
+  // 别的读者：别的角色写的，和他跟他们的来往
+  const others = all.filter((x) => (x.who !== 'me' && x.who !== c.id) || (x.who === c.id && x.to && byId.get(x.to) && byId.get(x.to).who !== 'me')).slice(-READ.otherTalk).map(line).join('\n');
+  return [{ role: 'user', content: T.readReviewPrompt({
+    c, me, title: b.title, chTotal: chs.length, today: ymd(Date.now()),
+    identityText: identityOf(c), memoryText: memoryOf(c, b.title, { mails: false }),
+    notes: notesText(rd, chs, chs.length, READ.reviewNotes) || '（没有记笔记）', talk, others,
+  }) }];
+}
+
+/** 聊天时告诉他：在和你一起读哪本书、读到哪、最近的笔记、你最近写的段评（最多两本，最近读的在前） */
+function readingOf(c) {
+  const acc = accOf(c), me = meName(acc);
+  return D.booksReadBy(c.id).filter((b) => b.acc === c.acc).sort((a, z) => (z.lastTs || 0) - (a.lastTs || 0)).slice(0, 2).map((b) => {
+    const chs = D.chapters(b.id), rd = D.readers(b.id)[c.id];
+    const read = chs.filter((ch) => rd.read?.includes(ch.id));
+    const last = [...chs].reverse().find((ch) => rd.notes?.[ch.id]);
+    const mine = D.bookCmts(b.id).filter((x) => x.who === 'me').slice(-2).map((x) => `「${cut(x.text, 60)}」`).join('');
+    const where = rd.review ? `你们一起读完了，你写过阅读日记` : read.length ? `你读完了 ${read.length} 章（现在一共 ${chs.length} 章${b.done ? '，已完结' : '，还在更新'}），${me}翻到了第 ${Math.max(1, b.reach || 0)} 章` : `${me}刚邀请你一起读，你还没开始读（现在一共 ${chs.length} 章）`;
+    return [`《${b.title}》：${where}。`, last && !rd.review ? `你最近的读书笔记：${cut(rd.notes[last.id], 200)}` : '', mine ? `${me}最近写的段评：${mine}` : ''].filter(Boolean).join(' ');
+  });
 }

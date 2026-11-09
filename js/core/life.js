@@ -1,4 +1,4 @@
-// 角色不在你眼前时的生活：写日记、回动态、发动态、很久没聊来找你、邮件（在 mail.js）。
+// 角色不在你眼前时的生活：写日记、回动态、发动态、很久没聊来找你、邮件（在 mail.js）、一起读书（在 read.js）。
 // 网页关掉就什么都不跑，所以每次打开（和开着的时候每隔一会儿）按时间补算。
 import * as D from './data.js';
 import { chat, queue } from './api.js';
@@ -8,6 +8,7 @@ import { reply as charReply } from './chat.js';
 import { ymd } from './time.js';
 import { getWeather } from './weather.js';
 import { mailTick } from './mail.js';
+import { readTick } from './read.js';
 
 const MIN = 60000, HOUR = 60 * MIN;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -82,8 +83,10 @@ async function momentJobs() {
 }
 
 // ── 日记 ──
+// 阅读日记（d.book 有值）是读完一本书时另写的，不算在这里：从上一篇普通日记往后接着写
+const plainDiaries = (cid) => D.diaries(cid).filter((d) => !d.book);
 export async function writeDiary(c, { force = false } = {}) {
-  const ds = D.diaries(c.id);
+  const ds = plainDiaries(c.id);
   const since = ds.length ? ds[ds.length - 1].upto || ds[ds.length - 1].ts : 0;
   const log = C.diaryLog(c, since);
   if (!log.count) { if (force) throw new Error('上一篇日记之后还没发生什么'); return null; }
@@ -100,7 +103,7 @@ export async function writeDiary(c, { force = false } = {}) {
   return d;
 }
 function diaryDue(c, life) {
-  const ds = D.diaries(c.id);
+  const ds = plainDiaries(c.id);
   const lastTs = ds.length ? ds[ds.length - 1].ts : c.createdAt || 0;
   const since = ds.length ? ds[ds.length - 1].upto || lastTs : 0;
   const log = C.diaryLog(c, since);
@@ -131,6 +134,7 @@ export function tick() {
       await momentJobs();
       const list = D.chars();
       await mailTick({ inQuiet });
+      await readTick();
       for (const c of list) { const L = D.lifeOf(c); if (L.diary && diaryDue(c, L)) { await writeDiary(c).catch((e) => console.warn('日记', e.message)); break; } }
       for (const c of list) {
         const L = D.lifeOf(c);

@@ -7,7 +7,8 @@ import * as D from '../../core/data.js';
 import { sep, md } from '../../core/time.js';
 import { fmtYuan, makeVoice, quoteText } from '../../core/parse.js';
 import * as CS from '../../core/chat.js';
-import { photoTile, viewPhoto, fwdCard } from '../shared.js';
+import { photoTile, viewPhoto, fwdCard, bookCover } from '../shared.js';
+import { join as joinBook } from '../../core/read.js';
 import { editChar } from './char.js';
 import { stickerSheet } from './stickers.js';
 import { composeMoment } from './moments.js';
@@ -250,6 +251,12 @@ export function openChat(ctx, cid, { at = null } = {}) {
         h('div', { class: 'cd-foot', text: '记进了日历' }));
     }
     if (p.t === 'fwd') return fwdCard(p);
+    if (p.t === 'book') {
+      const b = D.bookById(p.book), n = b ? D.chapters(b.id).length : 0;
+      return h('button', { class: 'card bookc', onclick: () => (b ? openApp('read', { book: b.id }) : toast('这本书已经删掉了')) },
+        h('div', { class: 'cd-top' }, bookCover(p.title, '', { mini: true }), h('div', {}, h('b', { text: `《${b?.title || p.title}》` }), h('small', { text: n ? `${n} 章` : '' }))),
+        h('div', { class: 'cd-foot', text: '一起读' }));
+    }
     return h('div', { class: 'bub', text: '' });
   }
 
@@ -289,7 +296,20 @@ export function openChat(ctx, cid, { at = null } = {}) {
       tile('photo', '相册', () => { s.close(); pickPhoto(); }),
       tile('camera', '拍照', async () => { s.close(); const v = await textSheet('拍照'); if (v) sendParts([{ t: 'photo', desc: v }]); }),
       tile('mic', '语音', async () => { s.close(); const v = await textSheet('语音'); if (v) sendParts([makeVoice(v)]); }),
-      tile('pay', '转账', () => { s.close(); transfer(); })) });
+      tile('pay', '转账', () => { s.close(); transfer(); }),
+      tile('book', '一起读', () => { s.close(); pickBook(); })) });
+  }
+  // 从书架挑一本发给他：他就加入一起读（core/read.js）
+  function pickBook() {
+    const list = D.booksOf();
+    const body = h('div', { class: 'pick-list' });
+    const s = sheet({ title: '一起读', body });
+    if (!list.length) body.append(h('div', { class: 'empty', text: '书架是空的' }));
+    for (const b of list) {
+      const n = D.chapters(b.id).length;
+      body.append(h('button', { class: 'pick-it', onclick: () => { s.close(); joinBook(b.id, cid); sendParts([{ t: 'book', book: b.id, title: b.title }]); } },
+        bookCover(b.title, 'pick-cv', { mini: true }), h('div', {}, h('b', { text: b.title }), h('small', { text: n ? `${n} 章` : '' }))));
+    }
   }
   const tile = (ic, name, fn) => h('button', { class: 'ch-tile', 'aria-label': name, onclick: fn }, h('span', { html: icon(ic) }));
   function pickPhoto() {

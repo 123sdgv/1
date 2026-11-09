@@ -121,6 +121,7 @@ export function partText(p) {
     case 'event': return `[日程 ${p.yearly ? '每年 ' + p.date.slice(5) : p.date}] ${p.title}`;
     case 'note': return `（${p.text}）`;
     case 'fwd': return fwdText(p);
+    case 'book': return `[书] 《${p.title}》`;
     default: return '';
   }
 }
@@ -139,6 +140,7 @@ export function partPreview(p) {
     case 'event': return '[日程] ' + p.title;
     case 'note': return p.text;
     case 'fwd': return '[聊天记录] ' + p.title;
+    case 'book': return `[书] 《${p.title}》`;
     default: return '';
   }
 }

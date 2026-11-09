@@ -67,6 +67,16 @@ export const ICONS = {
     <g filter="url(#sh-mail)"><path d="M24 54 60 79 96 54v36a6 6 0 0 1-6 6H30a6 6 0 0 1-6-6z" fill="${INK}"/></g>
     <path d="M27 92 55 75M93 92 65 75" stroke="#fff" stroke-opacity=".16" stroke-width="2.2" stroke-linecap="round"/>`),
 
+  // 阅读：一本摊开的书，右上角一个黑色的段评气泡
+  read: () => svg('read', `
+    <g filter="url(#sh-read)">
+      <path d="M60 52c-10-7-24-9-41-6v50c17-3 31-1 41 6z" fill="#fff" stroke="${INK}" stroke-width="4.6" stroke-linejoin="round"/>
+      <path d="M60 52c10-7 24-9 41-6v50c-17-3-31-1-41 6z" fill="#fff" stroke="${INK}" stroke-width="4.6" stroke-linejoin="round"/>
+    </g>
+    <g stroke="#d3d4d8" stroke-width="2.2" stroke-linecap="round" fill="none"><path d="M27 59c8-1 15 0 22 3M27 69c8-1 15 0 22 3M27 79c8-1 15 0 22 3M71 72c7-3 15-4 22-3M71 82c7-3 15-4 22-3"/></g>
+    <g filter="url(#sh-read)"><path d="M70 16h26a8 8 0 0 1 8 8v13a8 8 0 0 1-8 8H86l-10 9v-9h-6a8 8 0 0 1-8-8V24a8 8 0 0 1 8-8z" fill="${INK}"/></g>
+    <g stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M72 27h20M72 35h12"/></g>`),
+
   album: () => svg('album', `
     <defs><linearGradient id="ph-album" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5d5e63"/><stop offset="1" stop-color="#232326"/></linearGradient></defs>
     <g transform="rotate(-9 60 64)"><rect x="30" y="26" width="56" height="66" rx="3" fill="#fff" stroke="#bfc0c5" stroke-width="2"/><rect x="36" y="32" width="44" height="42" fill="#d6d7db"/></g>

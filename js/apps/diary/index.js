@@ -1,4 +1,5 @@
 // 日记：每个角色自己写的日记和心里话。隔一段时间自动写（打开时补写），也能点右上角让他现在写。
+// 一起读完一本书写的阅读日记也在这里（d.book 有值，右上角写着书名）。
 import { h, Stack, page, avatar, btnIc, menu, ask, toast, confirm, longPress, paras } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { writeDiary } from '../../core/life.js';
@@ -55,7 +56,8 @@ export function mount(body, { close, arg }) {
       for (const d of ds) {
         const dt = new Date(d.date + 'T12:00:00');
         const el = h('article', { class: 'dy-it' },
-          h('header', {}, h('b', { text: `${dt.getMonth() + 1}月${dt.getDate()}日` }), h('small', { text: `${dt.getFullYear()} · 星期${'日一二三四五六'[dt.getDay()]}` })),
+          h('header', {}, h('b', { text: `${dt.getMonth() + 1}月${dt.getDate()}日` }), h('small', { text: `${dt.getFullYear()} · 星期${'日一二三四五六'[dt.getDay()]}` }),
+            d.book ? h('em', { class: 'dy-book', text: `《${D.bookById(d.book)?.title || d.bookTitle || ''}》` }) : null),
           h('div', { class: 'dy-text' }, paras(d.text)),
           d.inner ? h('div', { class: 'dy-inner' }, h('small', { text: '心里话' }), paras(d.inner)) : null,
           d.keys?.length ? h('div', { class: 'dy-keys' }, d.keys.map((k) => h('span', { text: k }))) : null);

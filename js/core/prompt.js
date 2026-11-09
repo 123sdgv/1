@@ -62,8 +62,11 @@ export function present({ me, timeText, gapText, weather, events }) {
   ].filter(Boolean).join('\n'));
 }
 
+/** 他在读的书（聊天时放在会变的那段里） */
+export const reading = (lines) => (lines.length ? sec('你在读的书', list(lines)) : '');
+
 // ── 手机聊天 ──
-export function chatSystem({ c, me, identityText, memoryText, stickers, canMail, canSearch }) {
+export function chatSystem({ c, me, identityText, memoryText, stickers, canMail, canSearch, canBook = false }) {
   return join(
     `你在扮演「${c.name}」，正在用手机上的聊天软件和${me}聊天。这是线上聊天，你们不在一起。`,
     identityText,
@@ -81,7 +84,8 @@ ${stickers.length ? `  [表情包 名字] —— 发一个表情包。只能用�
   [动态] 内容 —— 在社交软件上发一条动态（${me}会在动态里看到，不会出现在聊天里），偶尔用
 ${canMail ? `  [邮件 主题] 然后另起几行写正文，最后单独一行写 [/邮件] —— 给${me}的邮箱发一封邮件（不会出现在聊天里），偶尔用，适合写长一点、正式一点的话
 ` : ''}${canSearch ? `  [搜索 关键词] —— 想知道最近发生的事、实时的消息，或者拿不准的事实，就只回这一行、别的都先别写；系统会把搜到的东西给你，你看完再回${me}
-` : ''}- ${me}发来的 [图片] 就是一张真照片，按看到这张照片来回应；[语音] 就是${me}说话的声音；[聊天记录] 是${me}转发给你的一段别人的聊天。
+` : ''}- ${me}发来的 [图片] 就是一张真照片，按看到这张照片来回应；[语音] 就是${me}说话的声音；[聊天记录] 是${me}转发给你的一段别人的聊天。${canBook ? `
+- ${me}发来的 [书] 《书名》 是在邀请你一起读这本书：你们用手机上的阅读 App 一章一章读，可以在段落下面写段评。你读到哪、写了什么，参考里会告诉你；没读到的部分你不知道。` : ''}
 - 不要写时间，不要写名字前缀，不要用其他格式。${stickers.length ? '' : '现在没有表情包可以发。'}`),
   );
 }
@@ -121,7 +125,7 @@ export function offlineSystem({ c, me, identityText, memoryText, scene, recentCh
 // ── 日记 ──
 export function diaryPrompt({ c, me, identityText, memoNumbered, log, from, to }) {
   return join(
-    `你是「${c.name}」。下面是从 ${from} 到 ${to} 你和${me}之间发生的事（有手机聊天，也可能有见面、邮件）。`,
+    `你是「${c.name}」。下面是从 ${from} 到 ${to} 你和${me}之间发生的事（有手机聊天，也可能有见面、邮件、一起读书时写的段评）。`,
     identityText,
     sec(`你原来记得的关于${me}的事`, memoNumbered || '（还没有）'),
     sec('这段时间发生的事', log),
@@ -211,5 +215,66 @@ export function mailWritePrompt({ c, me, identityText, memoryText, presentText, 
     `你想给${me}的邮箱写一封信。写你此刻想对${me}说、又适合写成信的事：近况、心事、一件想认真说的事都行。
 只输出一个 JSON，不要任何别的文字：
 {"subject": "主题", "body": "正文，可以分段"}`,
+  );
+}
+
+// ── 阅读（一起读书）──
+// 他一次读一章（太长的章分几次读），读完写段评、回别人的段评、给自己记读书笔记；整本读完写一篇阅读日记。
+const readIntro = (c, me, title) => `你是「${c.name}」。${me}邀请你一起读一本书《${title}》。你们用手机上的阅读 App 读，读的时候可以在某一段下面写「段评」（像网文 App 里的段评，读这本书的人都看得到）。`;
+
+/** 读一章（或一章里的一部分） */
+export function readChapterPrompt({ c, me, identityText, memoryText, title, chNo, chTitle, part, parts, notes, text, others }) {
+  return join(
+    readIntro(c, me, title),
+    identityText,
+    memoryText,
+    notes ? sec('你之前读的（你自己的读书笔记）', notes) : '',
+    sec(`现在读：第 ${chNo} 章${chTitle ? ' ' + chTitle : ''}${parts > 1 ? `（这一章的第 ${part}/${parts} 部分）` : ''}`, text),
+    others ? sec('这一章已经有的段评', others) : '',
+    sec('怎么读', `- 像真的读者那样读：只在真有感觉的段落写段评，这次写 0～5 条。段评要短，一两句，口语，用你自己的语气；可以感叹、吐槽、猜后面、联想到${me}或者你自己的事。
+- 你只读到这里，不知道后面会发生什么，别剧透，也别装作知道结局。
+- 别人的段评：${me}写的你都会看到；你认识的人写的，你多半会注意到；不认识的人写的，理不理随你。想回就回，不想回就不回，别为了回而回。
+- 读书笔记只给你自己看：记下这部分发生了什么、出场的人物、你的想法，100～250 字。以后接着读、跟${me}聊这本书的时候会用到。`),
+    `只输出一个 JSON，不要任何别的文字：
+{
+  "comments": [{"p": 段落编号（方括号里的数字）, "quote": "那一段里你在意的几个字，照原文抄", "text": "段评"}],
+  "replies": [{"to": 段评编号（# 后面的数字）, "text": "回复"}],
+  "note": "读书笔记"
+}`,
+  );
+}
+
+/** 有人回了他的段评，或者你在他读过的段落写了段评：他要不要回一句 */
+export function readReplyPrompt({ c, me, identityText, memoryText, title, chNo, para, thread, who, text, kind }) {
+  return join(
+    readIntro(c, me, title),
+    identityText,
+    memoryText,
+    sec(`第 ${chNo} 章里的一段`, para),
+    sec('这段下面的段评', thread),
+    kind === 'reply' ? `${who}刚刚回复了你：「${text}」。你要回吗？` : `${who}刚刚在这一段写了段评：「${text}」。你要回一句吗？`,
+    `只输出一个 JSON，不要任何别的文字：
+{"reply": "回复内容，一两句；不想回就留空字符串"}`,
+  );
+}
+
+/** 整本读完：阅读日记（进他的日记里） */
+export function readReviewPrompt({ c, me, identityText, memoryText, title, chTotal, notes, talk, others, today }) {
+  return join(
+    `你是「${c.name}」。你和${me}一起读完了《${title}》（一共 ${chTotal} 章）。你们用手机上的阅读 App 读，读的时候在段落下面写段评。`,
+    identityText,
+    memoryText,
+    sec('你一路写的读书笔记', notes),
+    talk ? sec(`你和${me}的段评来往`, talk) : '',
+    others ? sec('别的读者写的段评（和你跟他们的来往）', others) : '',
+    `现在写一篇阅读日记：这本书讲了什么、你最在意的地方、和${me}一起读的感受（${me}在哪里写了什么、你们怎么聊的）${others ? '，还有别的读者给你留下的印象' : ''}。第一人称，用你自己的语气。
+只输出一个 JSON，不要任何别的文字：
+{
+  "date": "${today}",
+  "diary": "阅读日记正文，300～600 字",
+  "inner": "几句只有你自己知道的心里话",
+  "keywords": ["5～10 个以后可能会再被提起的关键词：书名、人物、情节、和${me}有关的事"],
+  "memo_add": ["这次一起读书新知道的关于${me}的事，一条一句；没有就留空数组"]
+}`,
   );
 }

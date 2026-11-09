@@ -69,6 +69,7 @@ export function removeAccount(id) {
   S.set('photos', photos().filter((p) => p.acc !== id));
   S.set('mails', mails().filter((m) => m.acc !== id));
   for (const st of stories().filter((s) => s.acc === id)) removeStory(st.id, true);
+  for (const b of books().filter((x) => x.acc === id)) removeBook(b.id, true);
   S.set('accounts', accounts().filter((a) => a.id !== id));
   if (S.get('curAcc') === id) S.set('curAcc', accounts()[0]?.id || null);
   emit('account');
@@ -114,6 +115,14 @@ export function removeChar(id, quiet) {
   const m = S.get('chatmeta', {}); delete m[id]; S.set('chatmeta', m);
   S.set('moments', moments().filter((x) => x.who !== id).map((x) => ({ ...x, likes: x.likes.filter((w) => w !== id), comments: x.comments.filter((c) => c.who !== id), jobs: (x.jobs || []).filter((j) => j.who !== id) })));
   for (const st of stories().filter((s) => s.char === id)) removeStory(st.id, true);
+  // 阅读：不再一起读，他写的段评也去掉
+  for (const b of books()) {
+    const rd = readers(b.id);
+    if (rd[id]) { delete rd[id]; S.set('bookrd.' + b.id, rd); }
+    const cm = bookCmts(b.id);
+    if (cm.some((x) => x.who === id)) S.set('bookcm.' + b.id, cm.filter((x) => x.who !== id));
+  }
+  S.set('bookJobs', bookJobs().filter((j) => j.who !== id));
   if (!quiet) emit('chars');
 }
 
@@ -122,6 +131,7 @@ export function removeChar(id, quiet) {
 // 部件 { t:'text', text, quote? } { t:'voice', text, sec, quote? } { t:'sticker', name } { t:'photo', desc }
 //      { t:'pay', amount, note, state } { t:'event', date, title, yearly } { t:'note', text }
 //      { t:'fwd', title, items:[{ name, text }] }（合并转发的聊天记录）
+//      { t:'book', book, title }（你分享给他、邀请他一起读的书）
 //      （老存档里可能还有 t:'red'，按转账显示）  quote = { who:'me'|'them', text }
 export const msgs = (cid) => S.get('msgs.' + cid, []);
 export function setMsgs(cid, arr) { S.set('msgs.' + cid, arr); emit('msgs', cid); }
@@ -282,6 +292,45 @@ export const mailsWith = (cid) => mails().filter((m) => m.char === cid && m.box 
 // 还没到时间的「他回信」：{ who, mail, due }
 export const mailJobs = () => S.get('mailJobs', []);
 export function setMailJobs(arr) { S.set('mailJobs', arr); }
+
+// ── 阅读 ──
+// 书 { id, acc, title, done（完结了）, reach（你翻到过第几章，从 1 数）, pos: { ch, y }（上次读到哪：章 id、滚到的比例）, createdAt, lastTs }
+// 章节在 bookch.<书id>：[{ id, title, paras: [{ id, text }], ts }]，一次上传一章
+// 段评在 bookcm.<书id>：[{ id, ch, p（段 id）, who: 'me'|角色id, to（回复的那条段评 id）, q（他评的是那段里的哪几个字）, text, ts, fresh（他新写的、你还没点开看）}]
+// 一起读的人在 bookrd.<书id>：{ 角色id: { joined, read: [读完的章 id], part: { ch, k }（长的章分几次读，读到第几部分）, notes: { 章id: 读书笔记 }, review（读后感那篇日记的 id）, tries, next, last } }
+export const books = () => S.get('books', []);
+export const booksOf = (acc = curAccount().id) => books().filter((b) => b.acc === acc).sort((a, b) => (b.lastTs || b.createdAt) - (a.lastTs || a.createdAt));
+export const bookById = (id) => books().find((b) => b.id === id) || null;
+export function saveBook(b) {
+  const list = books();
+  const i = list.findIndex((x) => x.id === b.id);
+  if (i < 0) list.push(b); else list[i] = b;
+  S.set('books', list);
+  emit('books', b.id);
+  return b;
+}
+export function removeBook(id, quiet) {
+  S.set('books', books().filter((b) => b.id !== id));
+  for (const k of ['bookch.', 'bookcm.', 'bookrd.']) S.del(k + id);
+  S.set('bookJobs', bookJobs().filter((j) => j.book !== id));
+  if (!quiet) emit('books', id);
+}
+/** 记下读到哪（滚动时一直在存，不发事件，免得别的页跟着重画） */
+export function setBookPos(bid, pos) { const b = books().find((x) => x.id === bid); if (b) { b.pos = pos; S.touch('books'); } }
+export const chapters = (bid) => S.get('bookch.' + bid, []);
+export function setChapters(bid, arr) { S.set('bookch.' + bid, arr); emit('bookch', bid); }
+export const bookCmts = (bid) => S.get('bookcm.' + bid, []);
+export function setBookCmts(bid, arr) { S.set('bookcm.' + bid, arr); emit('bookcm', bid); }
+export const readers = (bid) => S.get('bookrd.' + bid, {});
+export function setReaders(bid, obj) { S.set('bookrd.' + bid, obj); emit('bookrd', bid); }
+/** 这个角色在读的书（当前身份下） */
+export const booksReadBy = (cid) => books().filter((b) => readers(b.id)[cid]);
+// 还没到时间的「他回你的段评」：{ book, who, cm, kind: 'reply'|'see', due, last }
+export const bookJobs = () => S.get('bookJobs', []);
+export function setBookJobs(arr) { S.set('bookJobs', arr); }
+// 阅读页的样子（所有书共用）：背景图在 file.readBg；size 背景放大多少（%）、blur 模糊、veil 盖在图上的那层多淡（0～1）、font 字号
+export const readConf = () => ({ size: 100, blur: 0, veil: 0.72, font: 19, ...S.get('readConf', {}) });
+export function setReadConf(patch) { S.set('readConf', { ...readConf(), ...patch }); emit('readConf'); }
 
 // ── 主屏幕布局 ──
 export const layout = () => S.get('layout', null);
