@@ -11,6 +11,8 @@
 //   [动态] 内容                          —— 他发一条动态（不出现在聊天里）
 //   [邮件 主题] 另起几行写正文，最后 [/邮件]   —— 他给你发一封邮件（不出现在聊天里）
 //   [搜索 关键词]                         —— 他想查点东西（设了搜索才有）：搜完把结果给他，再接着回
+//   [撤回]                                —— 他撤回自己刚发的上一条（也认 [撤回 那条里的几个字]）。撤回的那条变成部件
+//                                            { t: 'recall', by: 'me'|'them', was: 原来的部件 }，聊天里只显示一行「X 撤回了一条消息」
 import { stickerByName } from './data.js';
 
 export const stripThink = (s) => String(s || '').replace(/<think>[\s\S]*?(<\/think>|$)/gi, '').replace(/^\s*<\/think>/i, '');
@@ -76,6 +78,7 @@ export function parseLine(line) {
     }
     if (/^(动态|发动态|说说)$/.test(tag)) return rest || arg ? { act: 'post', text: rest || arg } : null;
     if (/^(邮件|发邮件|写信|信)$/.test(tag)) return { act: 'mail', subject: arg.slice(0, 60), body: rest };
+    if (/^(撤回|撤回消息|撤回上一条)$/.test(tag)) return { act: 'recall', q: (arg || rest).replace(/^[「“"']+|[」”"']+$/g, '').slice(0, 30) };
     if (/^(搜索|搜|查|查一下|联网搜索)$/.test(tag)) { const q = (arg + ' ' + rest).trim(); return q ? { act: 'search', q: q.slice(0, 80) } : null; }
   }
   if (MAIL_END.test(s)) return null;
@@ -98,11 +101,25 @@ export function parseChat(text) {
     if (!p) return;
     // 后面有 [/邮件]，或者这行只有标题（正文还在后面），就进入多行模式
     if (p.act === 'mail' && (!p.body || lines.slice(i + 1).some((l) => MAIL_END.test(l.trim())))) { mail = p; return; }
+    // [撤回]：这次回复里刚发的那条（或者带着那几个字的那条）变成「撤回了」；这次回复里找不到，就留给 chat.js 去以前的消息里找
+    if (p.act === 'recall') { const k = findRecall(parts, p.q); if (k >= 0) parts[k] = makeRecall(parts[k], 'them'); else acts.push(p); return; }
     if (p.act) acts.push(p); else parts.push(p);
   });
   if (mail) acts.push(mail);
   for (const a of acts) if (a.act === 'mail') a.body = a.body.trim();
   return { parts, acts: acts.filter((a) => a.act !== 'mail' || a.body) };
+}
+
+/** 撤回：原来的部件收在 was 里（界面上不显示、你撤回的也不给模型看） */
+export const makeRecall = (part, by) => ({ t: 'recall', by, was: part });
+/** 要撤回的是哪条：q 空 = 最后一条还没撤回的；有 q = 从后往前找带这几个字的。找不到返回 -1 */
+export function findRecall(parts, q = '') {
+  const key = String(q || '').replace(/…$/, '').slice(0, 12);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].t === 'recall') continue;
+    if (!key || partSearchText(parts[i]).includes(key)) return i;
+  }
+  return -1;
 }
 
 const yuan = (n) => (Math.round(n * 100) / 100).toFixed(2);
@@ -122,6 +139,8 @@ export function partText(p) {
     case 'note': return `（${p.text}）`;
     case 'fwd': return fwdText(p);
     case 'book': return `[书] 《${p.title}》`;
+    // 他自己撤回的：他记得发过什么、也记得撤回了（写成他自己会写的样子）；你撤回的：他没看到内容
+    case 'recall': return p.by === 'them' ? `${p.was ? partText(p.was) + '\n' : ''}[撤回]` : '（撤回了一条消息）';
     default: return '';
   }
 }
@@ -141,6 +160,7 @@ export function partPreview(p) {
     case 'note': return p.text;
     case 'fwd': return '[聊天记录] ' + p.title;
     case 'book': return `[书] 《${p.title}》`;
+    case 'recall': return '撤回了一条消息';
     default: return '';
   }
 }

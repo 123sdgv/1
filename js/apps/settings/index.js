@@ -44,7 +44,7 @@ export function mount(body, { close }) {
           try {
             const list = await listModels();
             if (!list.length) { toast('这家没给模型列表，手动填吧'); return; }
-            menu(list.slice(0, 60).map((m) => [m, () => { v.model = m; modelRow.querySelector('input').value = m; save(); }]), '选一个模型');
+            menu(list.map((m) => [m, () => { v.model = m; modelRow.querySelector('input').value = m; save(); }]), '选一个模型');
           } catch (e) { toast(e.message); }
         } })),
       result,

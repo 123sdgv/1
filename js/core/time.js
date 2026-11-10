@@ -45,3 +45,18 @@ export function span(ms) {
   if (h < 24) return (h < 10 ? Math.round(h * 10) / 10 : Math.round(h)) + ' 小时';
   return Math.round(h / 24) + ' 天';
 }
+
+// ── 时间线用：按「周一到周日」算一周 ──
+const dOf = (s) => new Date(s + 'T12:00:00');
+/** 某一天所在那一周的周一、周日（都是 YYYY-MM-DD） */
+export function weekOf(date) {
+  const d = dOf(date), k = (d.getDay() + 6) % 7;
+  const a = new Date(d); a.setDate(d.getDate() - k);
+  const b = new Date(a); b.setDate(a.getDate() + 6);
+  return { from: ymd(a), to: ymd(b) };
+}
+/** 某个月（YYYY-MM）的最后一天 */
+export function monthEnd(ym) { const [y, m] = ym.split('-').map(Number); return ymd(new Date(y, m, 0, 12)); }
+/** 时间线里的标题：11月3日 – 11月9日 / 2026年10月 */
+export const rangeText = (from, to) => `${md(dOf(from))} – ${md(dOf(to))}`;
+export const monthText = (ym) => { const [y, m] = ym.split('-').map(Number); return `${y}年${m}月`; };

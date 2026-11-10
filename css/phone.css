@@ -11,9 +11,18 @@
 .home-add { left: 16px; font-size: 18px !important; padding: 0 12px !important; }
 .home-done { right: 16px; }
 #home.editing .home-top button { opacity: 1; pointer-events: auto; }
-.home-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; container-type: inline-size; padding-top: 34px; scrollbar-width: none; }
-.home-scroll::-webkit-scrollbar { display: none; }
-#grid { display: grid; grid-template-columns: repeat(4, 1fr); column-gap: 14px; row-gap: 12px; padding: 4px 20px 24px; grid-auto-rows: calc((100cqw - 82px) / 4 + 8px); grid-auto-flow: row dense; }
+.home-pages { flex: 1; min-height: 0; overflow: hidden; touch-action: pan-y; }
+.home-strip { display: flex; height: 100%; will-change: transform; }
+.home-page { flex: none; width: 100%; height: 100%; overflow-y: auto; overflow-x: hidden; container-type: inline-size; padding-top: 34px; scrollbar-width: none; touch-action: pan-y; overscroll-behavior: contain; }
+.home-page::-webkit-scrollbar { display: none; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); column-gap: 14px; row-gap: 12px; padding: 4px 20px 24px; grid-auto-rows: calc((100cqw - 82px) / 4 + 8px); grid-auto-flow: row dense; }
+/* 页码小圆点：只有一页时不显示 */
+.home-dots { flex: none; height: 18px; display: flex; justify-content: center; align-items: center; gap: 7px; }
+.home-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.38); transition: background .2s; }
+.home-dots i.on { background: #fff; }
+.home-dots.one { height: 0; }
+.home-dots.one i { display: none; }
+#home { touch-action: pan-y; }
 .app { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; touch-action: none; }
 .app-ic { display: block; width: 62px; height: 62px; border-radius: 15px; overflow: hidden; box-shadow: 0 0 0 .5px rgba(0,0,0,.1), 0 3px 10px rgba(0,0,0,.28); transition: transform .15s; }
 .app-ic svg { width: 100%; height: 100%; display: block; }
@@ -100,14 +109,20 @@
 .wg-chat p { margin-top: 10px; font-size: 14px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .wg-chat.s p { -webkit-line-clamp: 3; font-size: 13px; }
 
-.wg-photo { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; margin: -14px -15px; padding: 14px 15px; background: radial-gradient(130% 90% at 30% 20%, #5e5f63, #1f1f21); color: #f3f3f3; }
-.wg-photo p { font: 13px/1.6 var(--serif); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-.wg-photo.l p { -webkit-line-clamp: 10; font-size: 15px; }
-.wg-photo small { margin-top: 6px; font-size: 11px; opacity: .6; }
+/* 外面那层小组件的 class 也叫 wg-photo，所以这里都限定在 .wg-in 里面（不然外面那层也跟着变宽） */
+.wg-in > .wg-photo { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 14px 15px; background: radial-gradient(130% 90% at 30% 20%, #5e5f63, #1f1f21); color: #f3f3f3; }
+.wg-in > .wg-photo p { font: 13px/1.6 var(--serif); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.wg-in > .wg-photo.l p { -webkit-line-clamp: 10; font-size: 15px; }
+.wg-in > .wg-photo small { margin-top: 6px; font-size: 11px; opacity: .6; }
+/* 放了自己的图：整块铺满，不写字 */
+.wg-in > .wg-photo.img { padding: 0; background: #1f1f21; }
+.wg-in > .wg-photo.img img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; }
 
 .wg-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 14px; padding: 6px 18px; }
 .wg-pick-it { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
 .wg.preview { width: 100%; aspect-ratio: 1; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.1); pointer-events: none; }
+.wg.preview.pg-new { display: flex; align-items: center; justify-content: center; background: none; box-shadow: inset 0 0 0 1.5px #C9C9C5; color: var(--ink-3); }
+.wg.preview.pg-new .ic { width: 30px; height: 30px; }
 
 /* ── App 窗口 ── */
 #windows { position: absolute; inset: 0; z-index: 20; pointer-events: none; }

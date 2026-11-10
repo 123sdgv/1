@@ -1,7 +1,7 @@
 // 入口：读存档 → 壁纸 → 主屏幕 → 锁屏 → 后台补算
 import * as S from './core/store.js';
 import * as D from './core/data.js';
-import { h, $, avatar } from './core/ui.js';
+import { h, $, avatar, toast } from './core/ui.js';
 import { buildHome } from './phone/home.js';
 import { initLock, isLocked } from './phone/lock.js';
 import { openApp, currentApp } from './phone/window.js';
@@ -78,6 +78,9 @@ async function boot() {
   buildHome();
   initLock((id, arg) => openApp(id, arg));
   D.on('notify', banner);
+  // 存档没写进去：说一声（一分钟最多一次）
+  let saidAt = 0;
+  D.on('savefail', () => { if (Date.now() - saidAt > 60000) { saidAt = Date.now(); toast('没存上：手机空间可能满了', 3500); } });
   startLife();
   window.__xsj = { S, D, openApp, currentApp };
 }

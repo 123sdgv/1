@@ -1,5 +1,5 @@
-// 备忘录：每个角色记得的关于你的事。每次聊天都会带给他；他写日记时也会自己加、删。你可以随便改。
-import { h, Stack, page, btnIc, menu, ask, toast, longPress, note } from '../../core/ui.js';
+// 备忘录：每个角色记得的关于你的事。每次聊天都会带给他；他写日记时也会自己加、删。你可以随便改：点一条改字，左滑点 × 删。
+import { h, Stack, page, btnIc, ask, swipeRow } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { md } from '../../core/time.js';
 import { charList } from '../diary/index.js';
@@ -38,8 +38,8 @@ export function mount(body, { close, arg }) {
           if (!v.trim()) { D.setMemos(cid, D.memos(cid).filter((x) => x.id !== m.id)); return; }
           m.text = v.trim(); D.setMemos(cid, D.memos(cid));
         } }, h('span', { class: 'mm-n', text: i + 1 }), h('p', { text: m.text }), h('small', { text: (m.auto ? '他记的 · ' : '') + md(m.ts) }));
-        longPress(it, () => menu([['删除这条', () => { D.setMemos(cid, D.memos(cid).filter((x) => x.id !== m.id)); toast('删掉了'); }, 'danger']]));
-        box.append(it);
+        // 左滑露出红色那块（只有一个 ×），点了才删
+        box.append(swipeRow(it, () => D.setMemos(cid, D.memos(cid).filter((x) => x.id !== m.id)), { icon: 'close' }));
       });
       p.scroll.append(box);
     };

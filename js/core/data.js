@@ -111,7 +111,7 @@ export function saveChar(c) {
 }
 export function removeChar(id, quiet) {
   S.set('chars', allChars().filter((c) => c.id !== id).map((c) => ({ ...c, knows: (c.knows || []).filter((k) => k !== id) })));
-  for (const k of ['msgs.', 'diary.', 'memo.']) S.del(k + id);
+  for (const k of ['msgs.', 'diary.', 'memo.', 'timeline.']) S.del(k + id);
   const m = S.get('chatmeta', {}); delete m[id]; S.set('chatmeta', m);
   S.set('moments', moments().filter((x) => x.who !== id).map((x) => ({ ...x, likes: x.likes.filter((w) => w !== id), comments: x.comments.filter((c) => c.who !== id), jobs: (x.jobs || []).filter((j) => j.who !== id) })));
   for (const st of stories().filter((s) => s.char === id)) removeStory(st.id, true);
@@ -174,6 +174,10 @@ export function removeMoment(id) { S.set('moments', moments().filter((m) => m.id
 // 日记 { id, date:'YYYY-MM-DD', ts, text, inner, keys:[关键词] }
 export const diaries = (cid) => S.get('diary.' + cid, []);
 export function setDiaries(cid, arr) { S.set('diary.' + cid, arr); emit('diary', cid); }
+// 时间线：旧日记压成的周记、月记（日记本身都留着）。
+// { id, kind: 'week'|'month', from, to（YYYY-MM-DD）, text, keys:[关键词], ts, last（压进去的最新一篇日记 / 周记的 ts，后来又有新的就重写）}
+export const timeline = (cid) => S.get('timeline.' + cid, []);
+export function setTimeline(cid, arr) { S.set('timeline.' + cid, arr); emit('timeline', cid); }
 // 备忘录 { id, text, ts }
 export const memos = (cid) => S.get('memo.' + cid, []);
 export function setMemos(cid, arr) { S.set('memo.' + cid, arr); emit('memo', cid); }

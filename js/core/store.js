@@ -39,7 +39,11 @@ const dirty = new Set();
 let timer = 0;
 const isSecret = (k) => SECRET.some((s) => k === s || k.startsWith(s + '.'));
 
-export async function boot() { Object.assign(D, await readAll()); }
+export async function boot() {
+  Object.assign(D, await readAll());
+  // 请浏览器别在空间紧张时自己清掉这份存档（给不给由浏览器定，不弹窗）
+  try { navigator.storage?.persist?.().catch(() => {}); } catch {}
+}
 export const get = (k, d) => (k in D ? D[k] : d);
 export function set(k, v) { D[k] = v; touch(k); return v; }
 export function del(k) { delete D[k]; touch(k); }
@@ -49,12 +53,22 @@ export function touch(k) {
   clearTimeout(timer);
   timer = setTimeout(flush, 300);
 }
+let fails = 0;
 export async function flush() {
   clearTimeout(timer);
   if (!dirty.size) return;
   const ks = [...dirty];
   dirty.clear();
-  await run('readwrite', (s) => { for (const k of ks) { if (k in D) s.put(D[k], k); else s.delete(k); } });
+  try {
+    await run('readwrite', (s) => { for (const k of ks) { if (k in D) s.put(D[k], k); else s.delete(k); } });
+    fails = 0;
+  } catch (e) {
+    // 没写进去（多半是空间满了）：别悄悄丢，记着这些键，过一会儿再试，并告诉界面
+    for (const k of ks) dirty.add(k);
+    console.warn('存档没写进去', e);
+    if (++fails <= 5) { clearTimeout(timer); timer = setTimeout(flush, 4000 * fails); }
+    emit('savefail', e);
+  }
 }
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 window.addEventListener('pagehide', () => flush());

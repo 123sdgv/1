@@ -2,7 +2,7 @@
 import * as D from './data.js';
 import { chat } from './api.js';
 import * as C from './context.js';
-import { parseChat, stripThink, partPreview, partText, quoteText } from './parse.js';
+import { parseChat, stripThink, partPreview, partText, quoteText, makeRecall, findRecall } from './parse.js';
 import { schedulePostReacts } from './life.js';
 import { charMail } from './mail.js';
 import { webSearch, searchReady } from './search.js';
@@ -35,8 +35,8 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
     rec = [...D.msgs(cid)].reverse().find((r) => r.role !== 'note');
     if (!rec || rec.role !== 'them') return null;
     uptoId = rec.id;
-    rec.alts.push([]);
-    rec.cur = rec.alts.length - 1;
+    // 上次没回成、留下的那个空版本就接着用，不再多出一个空的
+    if (D.partsOf(rec).length) { rec.alts.push([]); rec.cur = rec.alts.length - 1; }
     rec.ts = Date.now();
   } else {
     // 之前没回成、只剩一行报错的那条，这次重新回了就不留着
@@ -69,7 +69,9 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
           const { parts, acts } = parseChat(lines.join('\n'));
           if (cutAt < 0 && round === 0 && canSearch && acts.some((a) => a.act === 'search')) cutAt = parts.length;
           const vis = cutAt >= 0 ? parts.slice(0, cutAt) : parts;
-          if (vis.length !== shown) { shown = vis.length; rec.alts[rec.cur] = [...before, ...vis]; D.touchMsgs(cid); }
+          // 多了一条、或者有一条刚被他撤回了，才重画
+          const sig = vis.length * 100 + vis.filter((x) => x.t === 'recall').length;
+          if (sig !== shown) { shown = sig; rec.alts[rec.cur] = [...before, ...vis]; D.touchMsgs(cid); }
         },
       });
       const { parts, acts } = parseChat(text);
@@ -156,6 +158,11 @@ function finish(c, rec, acts) {
   // 你转给他、他还没处理的那笔（老存档里的红包也算）
   const waitPay = () => [...list].reverse().filter((r) => r.role === 'me').flatMap((r) => D.partsOf(r)).find((p) => (p.t === 'pay' && p.state === 'wait') || (p.t === 'red' && p.state === 'open'));
   for (const a of acts) {
+    // [撤回] 指的是以前发的（这次回复里没有可撤的）：在他最近的几条回复里找
+    if (a.act === 'recall') {
+      const olds = list.filter((r) => r.role === 'them' && r !== rec).slice(-6).reverse();
+      for (const r of olds) { const ps = D.partsOf(r), k = findRecall(ps, a.q); if (k >= 0) { ps[k] = makeRecall(ps[k], 'them'); break; } }
+    }
     if (a.act === 'takePay') { const p = waitPay(); if (p) { p.state = 'taken'; note(c.id, `${D.nameOf(c)}已收下你的转账`); } }
     if (a.act === 'backPay') { const p = waitPay(); if (p) { p.state = 'back'; note(c.id, `${D.nameOf(c)}退还了你的转账`); } }
     if (a.act === 'post') {
@@ -176,6 +183,26 @@ function finish(c, rec, acts) {
 }
 
 export function note(cid, text) { return D.addMsg(cid, { role: 'note', alts: [[{ t: 'note', text }]] }); }
+
+// ── 撤回 ──
+/**
+ * 撤回一条（你的、他的都走这里；界面上只给你自己的消息放了入口）。转账也能撤回。
+ * 那条变成 { t: 'recall' }，聊天里只剩一行「X 撤回了一条消息」；你撤回的，他下次看上文时也看不到内容。
+ * 你撤回的时候他还没开口：让他重新看一眼再回（他看到的就是你撤回了一条）。
+ */
+export function recall(cid, recId, i) {
+  const r = D.msgs(cid).find((x) => x.id === recId);
+  const ps = r && D.partsOf(r), p = ps && ps[i];
+  if (!p || p.t === 'recall' || r.role === 'note') return false;
+  ps[i] = makeRecall(p, r.role === 'me' ? 'me' : 'them');
+  D.touchMsgs(cid);
+  if (r.role === 'me' && lastIsMe(cid)) {
+    const cur = D.msgs(cid).find((x) => x.pending);
+    if (running.has(cid) && cur && !D.partsOf(cur).length) stop(cid); // 他正要回、还一个字没发：停下，重新回
+    autoReply(cid, 1500);
+  }
+  return true;
+}
 
 // ── 删聊天记录 ──
 // 删掉的就从记录里没了，他下次回复时看到的上文里也就没有这段（上文每次都是从记录现拼的，见 context.js）。
@@ -226,14 +253,15 @@ export async function offlineReply(sid, { regen = false } = {}) {
   if (running.has(key)) return;
   const st = D.stories().find((s) => s.id === sid);
   if (!st) return;
-  const list = D.storyMsgs(sid);
+  let list = D.storyMsgs(sid);
+  // 之前没写成、只剩一行报错的那条，这次重新写了就不留着（不然红字一直在）
+  if (!regen) list = list.filter((r) => !(r.role === 'them' && r.error && !D.partsOf(r)[0]?.text));
   let rec, uptoId = null;
   if (regen) {
     rec = list[list.length - 1];
     if (!rec || rec.role !== 'them') return;
     uptoId = rec.id;
-    rec.alts.push([]);
-    rec.cur = rec.alts.length - 1;
+    if (D.partsOf(rec)[0]?.text) { rec.alts.push([]); rec.cur = rec.alts.length - 1; }
   } else {
     rec = { id: D.uid(), role: 'them', ts: Date.now(), alts: [[]], cur: 0 };
     list.push(rec);

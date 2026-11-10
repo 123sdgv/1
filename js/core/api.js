@@ -35,11 +35,17 @@ export async function chat(messages, { onDelta, signal, temperature, max_tokens,
   if (!url || !cfg.model) throw new ApiError('还没填 API：去 设置 → API 填地址和模型', 'config');
   const body = { model: cfg.model, messages, stream, temperature: temperature ?? st.temperature, max_tokens: max_tokens ?? st.maxTokens };
   let res;
-  try {
-    res = await fetch(url, { method: 'POST', headers: headers(cfg.key), body: JSON.stringify(body), signal });
-  } catch (e) {
-    if (e.name === 'AbortError') throw e;
-    throw new ApiError('连不上：地址写错了，或者这家不允许网页直接调用（跨域）', 'network');
+  // 网络偶尔会断一下（刚切回来、信号不好）：没连上就自己再试一次，还不行才报错
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(url, { method: 'POST', headers: headers(cfg.key), body: JSON.stringify(body), signal });
+      break;
+    } catch (e) {
+      if (e.name === 'AbortError' || signal?.aborted) throw e.name === 'AbortError' ? e : new DOMException('aborted', 'AbortError');
+      if (attempt >= 1) throw new ApiError('连不上：地址写错了，或者这家不允许网页直接调用（跨域）', 'network');
+      await new Promise((r) => setTimeout(r, 800));
+      if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+    }
   }
   if (!res.ok) throw new ApiError(errText(res.status, await res.text().catch(() => '')), 'http');
   const ct = res.headers.get('content-type') || '';

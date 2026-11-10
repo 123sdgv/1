@@ -1,5 +1,6 @@
 // 聊天页：气泡、引用、语音、表情包、文字照片、转账、日程卡片、转发的聊天记录、重新生成（左右翻）。
-// 长按气泡冒出黑色小条：引用 · 编辑 · 重新回复 · 删除 · 多选。编辑在下面的输入栏里改。
+// 长按气泡冒出黑色小条：引用 · 编辑 · 撤回（只有你自己发的） · 重新回复 · 删除 · 多选。编辑在下面的输入栏里改。
+// 撤回了的那条只剩一行小字「X 撤回了一条消息」（他也能撤回自己的：[撤回]）；长按那行小字可以删掉。
 // 多选：每条前面一个圆圈，一次删掉或者合并转发（到动态、或者别的角色）。
 // 你发完消息他会自动回（core/chat.js 的 autoReply），不用点按钮。
 import { h, page, avatar, icon, btnIc, menu, toast, longPress, autosize, sheet, popbar, confirm } from '../../core/ui.js';
@@ -130,7 +131,7 @@ export function openChat(ctx, cid, { at = null } = {}) {
   }
   function selected() {
     const out = [];
-    for (const r of D.msgs(cid)) D.partsOf(r).forEach((p, i) => { if (sel.has(keyOf(r, i))) out.push({ r, i, p }); });
+    for (const r of D.msgs(cid)) D.partsOf(r).forEach((p, i) => { if (p.t !== 'recall' && sel.has(keyOf(r, i))) out.push({ r, i, p }); });
     return out;
   }
   async function deleteSel() {
@@ -205,6 +206,13 @@ export function openChat(ctx, cid, { at = null } = {}) {
     const ch = D.charById(cid), me = D.curAccount();
     const av = () => (r.role === 'them' ? avatar(ch?.avatar, D.nameOf(ch), 'sm') : avatar(me.avatar, me.name, 'sm'));
     parts.forEach((p, i) => {
+      // 撤回了的：一行小字。长按能删掉；多选时不算在里面
+      if (p.t === 'recall') {
+        const nt = h('div', { class: 'ch-note', text: `${p.by === 'me' ? '你' : D.nameOf(ch)}撤回了一条消息` });
+        if (!sel) longPress(nt, (e) => popbar(nt, [['trash', () => CS.removeParts(cid, (x, k) => x === r && k === i), '删除']], e ? { x: e.clientX, y: e.clientY } : null));
+        wrap.append(nt);
+        return;
+      }
       const main = partEl(r, p);
       const col = h('div', { class: 'bcol' }, main,
         p.t === 'voice' ? h('div', { class: 'vo-txt', text: p.text }) : null,
@@ -276,6 +284,7 @@ export function openChat(ctx, cid, { at = null } = {}) {
     popbar(anchor, [
       ['quote', () => { if (editing) endEdit(false); setQuote({ who: r.role === 'me' ? 'me' : 'them', text: quoteText(p) }); ta.focus(); }, '引用'],
       ['text', 'voice', 'photo'].includes(p.t) ? ['edit', () => startEdit(r, i), '编辑'] : null,
+      r.role === 'me' ? ['undo', () => { if (editing?.id === r.id) endEdit(false); CS.recall(cid, r.id, i); }, '撤回'] : null,
       isLast ? ['redo', () => regen(), '重新回复'] : null,
       ['trash', () => CS.removeParts(cid, (x, k) => x === r && k === i), '删除'],
       ['multi', () => setSel(new Set([keyOf(r, i)])), '多选'],

@@ -30,10 +30,11 @@ export function cardIdentity({ card, me }) {
   );
 }
 
-/** 记忆部分：备忘录 + 最近日记 + 关键词想起来的旧日记 + 最近的邮件 */
-export function memory({ me, memo, recent, recalled = [], mails = [] }) {
+/** 记忆部分：备忘录 + 时间线（更早的月记、周记）+ 最近日记 + 关键词想起来的旧日记 + 最近的邮件 */
+export function memory({ me, memo, recent, recalled = [], mails = [], timeline = [] }) {
   return join(
     memo.length ? sec(`你记得的关于${me}的事`, list(memo)) : '',
+    timeline.length ? sec('更早的日子（你自己写的月记、周记）', timeline.map((t) => `${t.title}\n${t.text}`).join('\n\n')) : '',
     recent.length ? sec('你最近写的日记', recent.map((d) => `${d.date}\n${d.text}`).join('\n\n')) : '',
     recalledText(recalled),
     mails.length ? sec(`你和${me}最近的邮件`, list(mails)) : '',
@@ -82,9 +83,10 @@ ${stickers.length ? `  [表情包 名字] —— 发一个表情包。只能用�
   [收下转账] [退还转账] —— 处理${me}转给你、你还没处理的转账
   [日程 YYYY-MM-DD] 事情 —— 往${me}的日历里记一件事；每年都有的（生日、纪念日）写 [日程 每年 MM-DD] 事情
   [动态] 内容 —— 在社交软件上发一条动态（${me}会在动态里看到，不会出现在聊天里），偶尔用
+  [撤回] —— 撤回你刚发出去的上一条消息（说错了、后悔了、不好意思了），${me}那边只会看到你撤回了一条消息。偶尔用
 ${canMail ? `  [邮件 主题] 然后另起几行写正文，最后单独一行写 [/邮件] —— 给${me}的邮箱发一封邮件（不会出现在聊天里），偶尔用，适合写长一点、正式一点的话
 ` : ''}${canSearch ? `  [搜索 关键词] —— 想知道最近发生的事、实时的消息，或者拿不准的事实，就只回这一行、别的都先别写；系统会把搜到的东西给你，你看完再回${me}
-` : ''}- ${me}发来的 [图片] 就是一张真照片，按看到这张照片来回应；[语音] 就是${me}说话的声音；[聊天记录] 是${me}转发给你的一段别人的聊天。${canBook ? `
+` : ''}- ${me}发来的 [图片] 就是一张真照片，按看到这张照片来回应；[语音] 就是${me}说话的声音；[聊天记录] 是${me}转发给你的一段别人的聊天。（撤回了一条消息）是${me}发了一条又撤回了，你没来得及看到内容。${canBook ? `
 - ${me}发来的 [书] 《书名》 是在邀请你一起读这本书：你们用手机上的阅读 App 一章一章读，可以在段落下面写段评。你读到哪、写了什么，参考里会告诉你；没读到的部分你不知道。` : ''}
 - 不要写时间，不要写名字前缀，不要用其他格式。${stickers.length ? '' : '现在没有表情包可以发。'}`),
   );
@@ -138,7 +140,32 @@ export function diaryPrompt({ c, me, identityText, memoNumbered, log, from, to }
   "keywords": ["5～10 个以后可能会再被提起的关键词：人名、地名、事件、东西"],
   "memo_add": ["新记住的关于${me}的事，一条一句，要具体；没有就留空数组"],
   "memo_remove": [已经不对了、要删掉的旧条目编号，没有就留空数组]
-}`,
+}
+旧条目里有重复的、说的是同一件事的，可以合并：把那几条的编号写进 memo_remove，再往 memo_add 里加一条合并好的。别的旧条目不要动。`,
+  );
+}
+
+// ── 时间线：旧日记压成周记、月记 ──
+/** 一周的日记 → 周记 */
+export function weekPrompt({ c, me, identityText, range, diaries }) {
+  return join(
+    `你是「${c.name}」。下面是你在 ${range} 这一周写的日记。`,
+    identityText,
+    sec('这一周的日记', diaries),
+    `把这一周写成一段周记：这周发生了哪些事、你和${me}之间有什么变化、你最在意的是什么。日子久了，你就靠这一段记得这一周，所以要具体（时间、地点、说过的要紧的话），只写日记里有的，不要编。第一人称，用你自己的语气，150～300 字。
+只输出一个 JSON，不要任何别的文字：
+{"summary": "周记", "keywords": ["3～8 个以后可能会再被提起的关键词"]}`,
+  );
+}
+/** 一个月的周记 → 月记 */
+export function monthPrompt({ c, me, identityText, month, weeks }) {
+  return join(
+    `你是「${c.name}」。下面是你在 ${month} 写的几段周记。`,
+    identityText,
+    sec('这个月的周记', weeks),
+    `把这个月写成一段月记：这个月里你和${me}走到了哪一步、发生过哪些要紧的事、你的心情怎么变的。只写周记里有的，不要编。第一人称，用你自己的语气，200～400 字。
+只输出一个 JSON，不要任何别的文字：
+{"summary": "月记", "keywords": ["3～8 个以后可能会再被提起的关键词"]}`,
   );
 }
 

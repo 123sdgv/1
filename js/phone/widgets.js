@@ -1,5 +1,5 @@
 // 小组件：每种一个 render(el, size, conf)。尺寸 s=2×2 格，m=4×2 格，l=4×4 格。
-// 加一种 = 在 WIDGETS 里加一项（name、sizes、render、点了打开哪个 App）
+// 加一种 = 在 WIDGETS 里加一项（name、sizes、render、点了打开哪个 App：open 可以是函数；conf：'char' 能选只看谁，'image' 能放一张自己的图）
 import { h, avatar, icon } from '../core/ui.js';
 import * as D from '../core/data.js';
 import { hm, md, weekday, ymd, short } from '../core/time.js';
@@ -102,7 +102,10 @@ function chat(el, size, conf) {
     h('p', { text: m.text })));
 }
 
-function photo(el, size) {
+function photo(el, size, conf) {
+  // 放了自己的图（整理时点这个小组件选）：只显示这张图。图只跟着这个小组件，不在相册里
+  const src = conf?.file ? D.file(conf.file) : null;
+  if (src) { el.append(h('div', { class: 'wg-photo img ' + size }, h('img', { src, alt: '', draggable: 'false' }))); return; }
   const list = D.photosOf();
   if (!list.length) { el.append(h('div', { class: 'wg-empty' }, h('b', { text: '相册' }), h('span', { text: '还没有照片' }))); return; }
   // 每天换一张
@@ -116,5 +119,5 @@ export const WIDGETS = {
   weather: { name: '天气', sizes: ['s', 'm', 'l'], render: weather, open: 'weather' },
   calendar: { name: '日历', sizes: ['s', 'm', 'l'], render: calendar, open: 'calendar' },
   chat: { name: '最近消息', sizes: ['s', 'm'], render: chat, open: 'social', conf: 'char' },
-  photo: { name: '相册', sizes: ['s', 'm', 'l'], render: photo, open: 'album' },
+  photo: { name: '相册', sizes: ['s', 'm', 'l'], render: photo, open: (conf) => (conf?.file && D.file(conf.file) ? null : 'album'), conf: 'image' },
 };

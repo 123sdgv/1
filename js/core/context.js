@@ -2,10 +2,10 @@
 import * as D from './data.js';
 import * as T from './prompt.js';
 import { partText, fwdText } from './parse.js';
-import { full, span, sep, ymd, hm, md } from './time.js';
+import { full, span, sep, ymd, hm, md, rangeText, monthText } from './time.js';
 import { weatherLine } from './weather.js';
 
-const LIMIT = { memo: 40, recentDiaries: 3, diaryChars: 700, recall: 2, offlineChat: 12, mails: 4, mailChars: 160, mailThread: 6 };
+const LIMIT = { memo: 120, memoOld: 30, diaryLog: 14000, months: 12, weeks: 6, tlChars: 420, recentDiaries: 3, diaryChars: 700, recall: 2, offlineChat: 12, mails: 4, mailChars: 160, mailThread: 6 };
 
 const accOf = (c) => D.accounts().find((a) => a.id === c.acc) || D.curAccount();
 export const meName = (acc) => acc.name || '我';
@@ -33,6 +33,15 @@ function recall(c, text, skipIds) {
   return hits.sort((a, b) => b[0] - a[0]).slice(0, LIMIT.recall).map(([, d]) => d);
 }
 const cut = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
+/** 聊天时带哪些备忘录：一般全带。实在太多（超过 LIMIT.memo）时，你亲手写的、最早记的那些一定留着，其余带最新的 */
+function memoFor(c) {
+  const all = D.memos(c.id);
+  if (all.length <= LIMIT.memo) return all;
+  const keep = new Set();
+  all.forEach((m, i) => { if (!m.auto || i < LIMIT.memoOld) keep.add(m.id); });
+  for (let i = all.length - 1; i >= 0 && keep.size < LIMIT.memo; i--) keep.add(all[i].id);
+  return all.filter((m) => keep.has(m.id));
+}
 
 // 一封信写成一行：谁写给谁、什么时候、主题、正文开头
 function mailLine(m, c, acc, chars = LIMIT.mailChars) {
@@ -45,7 +54,16 @@ function recalledOf(c, recentText) {
   const skip = new Set(D.diaries(c.id).slice(-LIMIT.recentDiaries).map((d) => d.id));
   return recall(c, recentText, skip).map(diaryOut);
 }
-export function memoryOf(c, recentText = '', { mails = true, withRecall = true } = {}) {
+/** 时间线里带给他看的：月记（最近 12 个月）+ 还没并进月记的周记（最近 6 段），按时间从早到晚 */
+export const tlTitle = (t) => (t.kind === 'month' ? `${monthText(t.from.slice(0, 7))}（月记）` : `${rangeText(t.from, t.to)}（周记）`);
+function timelineFor(c) {
+  const all = D.timeline(c.id);
+  const months = all.filter((t) => t.kind === 'month').sort((a, b) => (a.from < b.from ? -1 : 1)).slice(-LIMIT.months);
+  const done = new Set(months.map((t) => t.from.slice(0, 7)));
+  const weeks = all.filter((t) => t.kind === 'week' && !done.has(t.from.slice(0, 7))).sort((a, b) => (a.from < b.from ? -1 : 1)).slice(-LIMIT.weeks);
+  return [...months, ...weeks].map((t) => ({ title: tlTitle(t), text: cut(t.text, LIMIT.tlChars) }));
+}
+export function memoryOf(c, recentText = '', { mails = true, withRecall = true, timeline = true } = {}) {
   const acc = accOf(c);
   const all = D.diaries(c.id);
   const recent = all.slice(-LIMIT.recentDiaries);
@@ -53,10 +71,11 @@ export function memoryOf(c, recentText = '', { mails = true, withRecall = true }
   const rec = withRecall ? recall(c, recentText, skip) : [];
   return T.memory({
     me: meName(acc),
-    memo: D.memos(c.id).slice(-LIMIT.memo).map((m) => m.text),
+    memo: memoFor(c).map((m) => m.text),
     recent: recent.map((d) => ({ date: d.date, text: cut(d.text, LIMIT.diaryChars) })),
     recalled: rec.map((d) => ({ date: d.date, text: cut(d.text, LIMIT.diaryChars) })),
     mails: mails ? D.mailsWith(c.id).slice(-LIMIT.mails).map((m) => mailLine(m, c, acc)) : [],
+    timeline: timeline ? timelineFor(c) : [],
   });
 }
 
@@ -227,19 +246,37 @@ export function diaryLog(c, since) {
     }
   }
   rows.sort((a, b) => a[0] - b[0]);
+  // 太长了一篇日记装不下：只写到装得下的地方（last = 实际写到的那条），剩下的留给下一篇，不会漏掉最近的事
+  let take = rows.length, size = 0;
+  for (let i = 0; i < rows.length; i++) {
+    size += rows[i][1].length + 1;
+    if (size > LIMIT.diaryLog && i > 0) { take = i; break; }
+  }
+  while (take < rows.length && rows[take][0] === rows[take - 1][0]) take++; // 同一刻的别拆开
+  const used = rows.slice(0, take);
   // 按天分段
   let day = '', out = [];
-  for (const [ts, line] of rows) {
+  for (const [ts, line] of used) {
     const d = ymd(ts);
     if (d !== day) { day = d; out.push(`—— ${d} ——`); }
     out.push(line);
   }
-  return { text: out.join('\n'), count: rows.length, first: rows[0]?.[0], last: rows[rows.length - 1]?.[0] };
+  return { text: out.join('\n'), count: rows.length, more: take < rows.length, first: used[0]?.[0], last: used[used.length - 1]?.[0] };
 }
 export function buildDiary(c, log) {
   const acc = accOf(c);
   const memo = D.memos(c.id).map((m, i) => `${i + 1}. ${m.text}`).join('\n');
-  return [{ role: 'user', content: T.diaryPrompt({ c, me: meName(acc), identityText: identityOf(c), memoNumbered: memo, log: cut(log.text, 14000), from: ymd(log.first), to: ymd(log.last) }) }];
+  return [{ role: 'user', content: T.diaryPrompt({ c, me: meName(acc), identityText: identityOf(c), memoNumbered: memo, log: log.text, from: ymd(log.first), to: ymd(log.last) }) }];
+}
+
+// ── 时间线 ──
+export function buildWeek(c, from, to, diaries) {
+  const text = diaries.map((d) => `${d.date}${d.book ? `（读完《${d.bookTitle || ''}》写的）` : ''}\n${cut(d.text, 1200)}${d.inner ? `\n（心里话）${cut(d.inner, 300)}` : ''}`).join('\n\n');
+  return [{ role: 'user', content: T.weekPrompt({ c, me: meName(accOf(c)), identityText: identityOf(c), range: rangeText(from, to), diaries: text }) }];
+}
+export function buildMonth(c, ym, weeks) {
+  const text = weeks.map((w) => `${rangeText(w.from, w.to)}\n${w.text}`).join('\n\n');
+  return [{ role: 'user', content: T.monthPrompt({ c, me: meName(accOf(c)), identityText: identityOf(c), month: monthText(ym), weeks: text }) }];
 }
 
 /** 动态的文字版：正文、配图、评论 */
@@ -258,11 +295,11 @@ export function buildPost(c) {
   return [{ role: 'user', content: T.postPrompt({ c, me: meName(acc), identityText: identityOf(c), memoryText: memoryOf(c), presentText: [presentOf(c, 0), T.activity(activityOf(c))].filter(Boolean).join('\n\n') }) }];
 }
 export function buildReact(c, m) {
-  return [{ role: 'user', content: T.reactPrompt({ c, identityText: identityOf(c), memoryText: memoryOf(c, m.text), presentText: presentOf(c, 0), thread: threadText(m) }) }];
+  return [{ role: 'user', content: T.reactPrompt({ c, identityText: identityOf(c), memoryText: memoryOf(c, m.text, { timeline: false }), presentText: presentOf(c, 0), thread: threadText(m) }) }];
 }
 export function buildReply(c, m, cm) {
   const acc = D.accounts().find((a) => a.id === m.acc) || D.curAccount();
-  return [{ role: 'user', content: T.replyPrompt({ c, identityText: identityOf(c), memoryText: memoryOf(c, cm.text), presentText: presentOf(c, 0), thread: threadText(m), who: whoName(cm.who, acc), text: cm.text }) }];
+  return [{ role: 'user', content: T.replyPrompt({ c, identityText: identityOf(c), memoryText: memoryOf(c, cm.text, { timeline: false }), presentText: presentOf(c, 0), thread: threadText(m), who: whoName(cm.who, acc), text: cm.text }) }];
 }
 // ── 邮件 ──
 function mailThread(c, exceptId = null) {
@@ -338,7 +375,7 @@ export function buildReadChapter(c, b, chIdx, k) {
     nums,
     msgs: [{ role: 'user', content: T.readChapterPrompt({
       c, me, title: b.title, chNo: chIdx + 1, chTitle: ch.title, part: k + 1, parts: parts.length,
-      identityText: identityOf(c), memoryText: memoryOf(c, '', { mails: false, withRecall: false }),
+      identityText: identityOf(c), memoryText: memoryOf(c, '', { mails: false, withRecall: false, timeline: false }),
       notes: notes.trim(), text, others,
     }) }],
   };
@@ -358,7 +395,7 @@ export function buildReadReply(c, b, cm, kind) {
   return [{ role: 'user', content: T.readReplyPrompt({
     c, me, title: b.title, chNo: chIdx + 1, para: cut(para, READ.para), thread: paraThread(b, cm, c, acc),
     who: cm.who === 'me' ? me : readerLabel(cm.who, c, acc).replace(/（.*）$/, ''), text: cm.text, kind,
-    identityText: identityOf(c), memoryText: memoryOf(c, cm.text, { mails: false }),
+    identityText: identityOf(c), memoryText: memoryOf(c, cm.text, { mails: false, timeline: false }),
   }) }];
 }
 

@@ -1,11 +1,11 @@
-// 角色不在你眼前时的生活：写日记、回动态、发动态、很久没聊来找你、邮件（在 mail.js）、一起读书（在 read.js）。
+// 角色不在你眼前时的生活：写日记、把旧日记整理成时间线（周记、月记）、回动态、发动态、很久没聊来找你、邮件（在 mail.js）、一起读书（在 read.js）。
 // 网页关掉就什么都不跑，所以每次打开（和开着的时候每隔一会儿）按时间补算。
 import * as D from './data.js';
 import { chat, queue } from './api.js';
 import * as C from './context.js';
 import { parseJSON } from './parse.js';
 import { reply as charReply } from './chat.js';
-import { ymd } from './time.js';
+import { ymd, weekOf, monthEnd } from './time.js';
 import { getWeather } from './weather.js';
 import { mailTick } from './mail.js';
 import { readTick } from './read.js';
@@ -109,7 +109,52 @@ function diaryDue(c, life) {
   const log = C.diaryLog(c, since);
   if (log.count < 10) return false;
   if (Date.now() - log.last < 30 * MIN) return false; // 还在聊，别打断
-  return Date.now() - lastTs > life.diaryHours * HOUR || log.count >= 150;
+  // 攒了很多、或者上一篇没装下还剩一大截：不等了
+  return Date.now() - lastTs > life.diaryHours * HOUR || log.count >= 150 || log.more;
+}
+
+// ── 时间线：旧日记压成周记，周记再压成月记（日记本身都留着）──
+// 一周过完（周一到周日）才写那周的周记；一个月的周记都齐了才写月记。后来那周又多了日记（补写的）就重写。
+// 返回还没整理的第一件事：{ kind: 'week', from, to, diaries } / { kind: 'month', ym, weeks }；没有就 null。
+// now = true：还没过完的这一周也算（日记页时间线里「现在整理」用）
+export function timelineTodo(c, { now = false } = {}) {
+  const today = ymd(), tl = D.timeline(c.id);
+  const byWeek = new Map();
+  for (const d of D.diaries(c.id)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date || '')) continue;
+    const w = weekOf(d.date);
+    if (!byWeek.has(w.from)) byWeek.set(w.from, { ...w, diaries: [] });
+    byWeek.get(w.from).diaries.push(d);
+  }
+  const weeks = [...byWeek.values()].sort((a, b) => (a.from < b.from ? -1 : 1));
+  for (const w of weeks) {
+    if (w.to >= today && !now) continue;
+    const have = tl.find((t) => t.kind === 'week' && t.from === w.from);
+    const last = Math.max(...w.diaries.map((d) => d.ts || 0));
+    if (!have || (have.last || 0) < last) return { kind: 'week', from: w.from, to: w.to, diaries: w.diaries.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.ts || 0) - (b.ts || 0))), last };
+  }
+  // 月记：这个月过完了、月底那一周也过完了（那周的周记已经在上面写好）
+  const months = [...new Set(tl.filter((t) => t.kind === 'week').map((t) => t.from.slice(0, 7)))].sort();
+  for (const ym of months) {
+    if (weekOf(monthEnd(ym)).to >= today) continue;
+    const ws = tl.filter((t) => t.kind === 'week' && t.from.slice(0, 7) === ym).sort((a, b) => (a.from < b.from ? -1 : 1));
+    const have = tl.find((t) => t.kind === 'month' && t.from.slice(0, 7) === ym);
+    const last = Math.max(...ws.map((t) => t.ts || 0));
+    if (!have || (have.last || 0) < last) return { kind: 'month', ym, weeks: ws, last };
+  }
+  return null;
+}
+/** 整理一件（写一段周记或月记）。没有要整理的返回 null */
+export async function writeTimeline(c, opt) {
+  const todo = timelineTodo(c, opt);
+  if (!todo) return null;
+  const j = parseJSON(await ask(todo.kind === 'week' ? C.buildWeek(c, todo.from, todo.to, todo.diaries) : C.buildMonth(c, todo.ym, todo.weeks), 1200, c));
+  const text = String(j?.summary || '').trim();
+  if (!text) throw new Error('这次没整理成，过会儿再试');
+  const from = todo.kind === 'week' ? todo.from : todo.ym + '-01', to = todo.kind === 'week' ? todo.to : monthEnd(todo.ym);
+  const item = { id: D.uid(), kind: todo.kind, from, to, text, keys: (j.keywords || []).map(String).filter(Boolean).slice(0, 10), ts: Date.now(), last: todo.last };
+  D.setTimeline(c.id, [...D.timeline(c.id).filter((t) => !(t.kind === item.kind && t.from === item.from)), item]);
+  return item;
 }
 
 // ── 角色发动态 ──
@@ -125,6 +170,10 @@ export async function charPost(c) {
 // ── 主程序：一次补算（每个角色按自己资料里「他的生活」那几项来）──
 export const inQuiet = (L) => { if (L.quiet === false) return false; const hr = new Date().getHours(); return L.quietFrom === L.quietTo ? false : L.quietFrom < L.quietTo ? hr >= L.quietFrom && hr < L.quietTo : hr >= L.quietFrom || hr < L.quietTo; };
 let running = false, lastAway = 0;
+// 日记、时间线没写成（比如模型回的不是 JSON）：过半小时再试，别每 45 秒白花一次钱
+const retryAt = new Map();
+const canTry = (key) => Date.now() >= (retryAt.get(key) || 0);
+const failed = (key, what) => (e) => { retryAt.set(key, Date.now() + 30 * MIN); console.warn(what, e.message); };
 export function tick() {
   if (running || !D.api().base) return;
   running = true;
@@ -135,7 +184,9 @@ export function tick() {
       const list = D.chars();
       await mailTick({ inQuiet });
       await readTick();
-      for (const c of list) { const L = D.lifeOf(c); if (L.diary && diaryDue(c, L)) { await writeDiary(c).catch((e) => console.warn('日记', e.message)); break; } }
+      for (const c of list) { const L = D.lifeOf(c); if (L.diary && canTry('d' + c.id) && diaryDue(c, L)) { await writeDiary(c).catch(failed('d' + c.id, '日记')); break; } }
+      // 时间线：一次只整理一件（一段周记或月记）
+      for (const c of list) { if (canTry('t' + c.id) && timelineTodo(c)) { await writeTimeline(c).catch(failed('t' + c.id, '时间线')); break; } }
       for (const c of list) {
         const L = D.lifeOf(c);
         if (!L.post) continue;
