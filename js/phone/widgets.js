@@ -1,10 +1,24 @@
-// 小组件：每种一个 render(el, size, conf)。尺寸 s=2×2 格，m=4×2 格，l=4×4 格。
-// 加一种 = 在 WIDGETS 里加一项（name、sizes、render、点了打开哪个 App：open 可以是函数；conf：'char' 能选只看谁，'image' 能放一张自己的图）
+// 小组件：每种一个 render(el, size, conf, key)。大小按格子算（w×h，4 列），size 是给样子用的：
+//   s = 2 格宽的方块，t = 2 格宽的竖条，m = 4 格宽 2 格高，l = 4 格宽 3～4 格高
+// 加一种 = 在 WIDGETS 里加一项（name、sizes 能拖成哪几种大小、render、点了打开哪个 App：open 可以是函数；
+//   conf：'char' 能选只看谁，'image' 能放几张自己的图，'event' 能选倒数哪件事）
 import { h, avatar, icon } from '../core/ui.js';
 import * as D from '../core/data.js';
 import { hm, md, weekday, ymd, short } from '../core/time.js';
 import { cached, describe, wxIcon, getWeather } from '../core/weather.js';
 import { partPreview } from '../core/parse.js';
+
+export const sizeClass = (w, hh) => (w <= 2 ? (hh >= 3 ? 't' : 's') : hh <= 2 ? 'm' : 'l');
+/** 拖到的大小（小数格）→ 这种小组件能用的、最接近的那个。一样近的挑大的 */
+export function nearestSize(type, rw, rh, maxW = 4) {
+  const list = (WIDGETS[type]?.sizes || [[2, 2]]).filter(([w]) => w <= maxW);
+  let best = list[0] || [2, 2], bs = Infinity;
+  for (const [w, hh] of list) {
+    const d = (rw - w) ** 2 + (rh - hh) ** 2 - (w * hh) * 1e-6;
+    if (d < bs) { bs = d; best = [w, hh]; }
+  }
+  return [...best];
+}
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -102,22 +116,40 @@ function chat(el, size, conf) {
     h('p', { text: m.text })));
 }
 
-function photo(el, size, conf) {
-  // 放了自己的图（整理时点这个小组件选）：只显示这张图。图只跟着这个小组件，不在相册里
-  const src = conf?.file ? D.file(conf.file) : null;
-  if (src) { el.append(h('div', { class: 'wg-photo img ' + size }, h('img', { src, alt: '', draggable: 'false' }))); return; }
-  const list = D.photosOf();
-  if (!list.length) { el.append(h('div', { class: 'wg-empty' }, h('b', { text: '相册' }), h('span', { text: '还没有照片' }))); return; }
-  // 每天换一张
-  const seed = Number(ymd().replace(/-/g, ''));
-  const p = list[seed % list.length];
-  el.append(h('div', { class: 'wg-photo ' + size }, h('p', { text: p.desc }), h('small', { text: md(p.ts) })));
+// 相册小组件：只放你自己的图（整理时点它放，可以好几张，不进相册），隔 10 分钟换一张，淡入淡出。没有图就空着
+const ROT = 10 * 60000;
+const shown = new Map(); // 小组件 → 上次显示的那张（换的时候从它淡到新的）
+const seedOf = (s) => { let x = 7; for (const ch of String(s)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x; };
+function photo(el, size, conf, key = '') {
+  const srcs = (conf?.files || []).map((f) => D.file(f)).filter(Boolean);
+  if (!srcs.length) { el.append(h('div', { class: 'wg-photo none ' + size }, h('span', { html: icon('image') }))); return; }
+  const src = srcs[(Math.floor(Date.now() / ROT) + seedOf(key)) % srcs.length];
+  const prev = shown.get(key);
+  shown.set(key, src);
+  const box = h('div', { class: 'wg-photo img ' + size });
+  if (prev && prev !== src) box.append(h('img', { class: 'under', src: prev, alt: '', draggable: 'false' }));
+  box.append(h('img', { class: prev && prev !== src ? 'fade' : '', src, alt: '', draggable: 'false' }));
+  el.append(box);
 }
 
+// 倒数日：离日历里下一件（没打勾的）事还有几天；也可以一直倒数某一件（整理时点它选）
+function countdown(el, size, conf) {
+  const list = D.upcoming(3660).filter((x) => !x.done);
+  const it = conf?.event ? list.find((x) => x.e.id === conf.event) : list[0];
+  if (!it) { el.append(h('div', { class: 'wg-empty' }, h('span', { text: '没有日程' }))); return; }
+  const n = daysTo(it.at);
+  el.append(h('div', { class: 'wg-cd ' + size },
+    h('small', { text: it.e.title }),
+    h('div', { class: 'wg-cd-n' }, n === 0 ? h('b', { class: 'today', text: '今天' }) : [h('b', { text: n }), h('span', { text: '天' })]),
+    h('em', { text: md(new Date(it.at + 'T12:00:00').getTime()) + (it.e.yearly ? ' · 每年' : '') })));
+}
+
+const S3 = [[2, 2], [4, 2], [4, 4]];
 export const WIDGETS = {
-  clock: { name: '时间', sizes: ['s', 'm', 'l'], render: clock, open: null },
-  weather: { name: '天气', sizes: ['s', 'm', 'l'], render: weather, open: 'weather' },
-  calendar: { name: '日历', sizes: ['s', 'm', 'l'], render: calendar, open: 'calendar' },
-  chat: { name: '最近消息', sizes: ['s', 'm'], render: chat, open: 'social', conf: 'char' },
-  photo: { name: '相册', sizes: ['s', 'm', 'l'], render: photo, open: (conf) => (conf?.file && D.file(conf.file) ? null : 'album'), conf: 'image' },
+  clock: { name: '时间', sizes: S3, render: clock, open: null },
+  weather: { name: '天气', sizes: S3, render: weather, open: 'weather' },
+  calendar: { name: '日历', sizes: S3, render: calendar, open: 'calendar' },
+  chat: { name: '最近消息', sizes: [[2, 2], [4, 2]], render: chat, open: 'social', conf: 'char' },
+  photo: { name: '相册', sizes: [[2, 2], [2, 3], [2, 4], [4, 2], [4, 3], [4, 4]], render: photo, open: null, conf: 'image' },
+  countdown: { name: '倒数日', sizes: [[2, 2], [4, 2]], render: countdown, open: 'calendar', conf: 'event' },
 };

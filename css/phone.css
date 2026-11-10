@@ -15,7 +15,8 @@
 .home-strip { display: flex; height: 100%; will-change: transform; }
 .home-page { flex: none; width: 100%; height: 100%; overflow-y: auto; overflow-x: hidden; container-type: inline-size; padding-top: 34px; scrollbar-width: none; touch-action: pan-y; overscroll-behavior: contain; }
 .home-page::-webkit-scrollbar { display: none; }
-.grid { display: grid; grid-template-columns: repeat(4, 1fr); column-gap: 14px; row-gap: 12px; padding: 4px 20px 24px; grid-auto-rows: calc((100cqw - 82px) / 4 + 8px); grid-auto-flow: row dense; }
+/* 每页的格子：4 列，行数 = 一页看得见的行数（home.js 的 measure 算好放在 --rows），东西按坐标放，中间可以空着；放不下的往下多出几行（能滚） */
+.grid { --rowh: calc((100cqw - 82px) / 4 + 8px); display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(var(--rows, 6), var(--rowh)); grid-auto-rows: var(--rowh); column-gap: 14px; row-gap: 12px; padding: 4px 20px 24px; }
 /* 页码小圆点：只有一页时不显示 */
 .home-dots { flex: none; height: 18px; display: flex; justify-content: center; align-items: center; gap: 7px; }
 .home-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.38); transition: background .2s; }
@@ -44,10 +45,14 @@
 /* ── 小组件 ── */
 .wg { position: relative; border-radius: 22px; background: rgba(255,255,255,.92); color: var(--ink); box-shadow: 0 6px 20px rgba(0,0,0,.18); touch-action: none; min-width: 0; }
 .wg-in { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; padding: 14px 15px; display: flex; flex-direction: column; }
-.wg-del, .wg-size { position: absolute; display: none; z-index: 3; align-items: center; justify-content: center; }
-.wg-del { top: -7px; left: -7px; width: 24px; height: 24px; border-radius: 50%; background: #e8e8e6; color: var(--ink); font-size: 20px; line-height: 1; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
-.wg-size { right: 8px; bottom: 8px; height: 22px; padding: 0 8px; border-radius: 11px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 600; }
-#home.editing .wg-del, #home.editing .wg-size { display: flex; }
+.wg-del { position: absolute; display: none; z-index: 3; align-items: center; justify-content: center; top: -7px; left: -7px; width: 24px; height: 24px; border-radius: 50%; background: #e8e8e6; color: var(--ink); font-size: 20px; line-height: 1; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+/* 改大小的小角：右下角一段白色圆弧（靠右边的小组件在左下角）。手指按的范围比看到的大 */
+.wg-rs { position: absolute; display: none; z-index: 3; right: -10px; bottom: -10px; width: 44px; height: 44px; touch-action: none; }
+.wg-rs::after { content: ''; position: absolute; right: 12px; bottom: 12px; width: 18px; height: 18px; border-right: 4px solid #fff; border-bottom: 4px solid #fff; border-bottom-right-radius: 16px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+.wg-rs.l { right: auto; left: -10px; }
+.wg-rs.l::after { right: auto; left: 12px; border-right: 0; border-left: 4px solid #fff; border-bottom-right-radius: 0; border-bottom-left-radius: 16px; }
+#home.editing .wg-del, #home.editing .wg-rs { display: flex; }
+.wg.sizing { animation: none !important; box-shadow: 0 0 0 2px rgba(255,255,255,.85), 0 10px 26px rgba(0,0,0,.3); z-index: 4; }
 .wg-empty { margin: auto 0 0; }
 .wg-empty b { display: block; font-size: 15px; }
 .wg-empty span { display: block; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
@@ -114,9 +119,36 @@
 .wg-in > .wg-photo p { font: 13px/1.6 var(--serif); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .wg-in > .wg-photo.l p { -webkit-line-clamp: 10; font-size: 15px; }
 .wg-in > .wg-photo small { margin-top: 6px; font-size: 11px; opacity: .6; }
-/* 放了自己的图：整块铺满，不写字 */
+/* 放了自己的图：整块铺满，不写字；换图的时候新的那张淡进来 */
 .wg-in > .wg-photo.img { padding: 0; background: #1f1f21; }
-.wg-in > .wg-photo.img img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; }
+.wg-in > .wg-photo.img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; }
+.wg-in > .wg-photo.img img.fade { animation: wgfade 1.2s ease both; }
+@keyframes wgfade { from { opacity: 0; } to { opacity: 1; } }
+/* 还没放图：空着，中间一个淡淡的图片符号 */
+.wg-in > .wg-photo.none { padding: 0; background: #F1F1EF; color: #C4C4C0; align-items: center; justify-content: center; }
+.wg-in > .wg-photo.none .ic { width: 34px; height: 34px; stroke-width: 1.3; }
+/* 相册小组件的图：管理面板 */
+.wp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 4px 18px 10px; }
+.wp-it { position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; background: var(--soft); }
+.wp-it img { width: 100%; height: 100%; object-fit: cover; }
+.wp-it.add { display: flex; align-items: center; justify-content: center; background: none; box-shadow: inset 0 0 0 1.5px #C9C9C5; color: var(--ink-3); }
+.wp-it.add .ic { width: 28px; height: 28px; }
+.wp-x { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); color: #fff; }
+.wp-x .ic { width: 15px; height: 15px; }
+
+/* 倒数日：事情、还有几天、哪天 */
+.wg-cd { height: 100%; display: flex; flex-direction: column; }
+.wg-cd small { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wg-cd-n { margin-top: auto; display: flex; align-items: baseline; gap: 3px; }
+.wg-cd-n b { font-size: 46px; font-weight: 200; line-height: 1; letter-spacing: -.02em; }
+.wg-cd-n b.today { font-size: 30px; font-weight: 300; }
+.wg-cd-n span { font-size: 14px; color: var(--ink-2); }
+.wg-cd em { font-style: normal; font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+.wg-cd.m { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr; align-items: end; }
+.wg-cd.m small { grid-column: 1; font-size: 15px; }
+.wg-cd.m em { grid-column: 1; grid-row: 2; align-self: end; margin: 0; }
+.wg-cd.m .wg-cd-n { grid-column: 2; grid-row: 1 / span 2; align-self: center; margin: 0; }
+.wg-cd.m .wg-cd-n b { font-size: 60px; }
 
 .wg-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 14px; padding: 6px 18px; }
 .wg-pick-it { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }

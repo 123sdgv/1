@@ -269,3 +269,34 @@
 .ce-av { position: relative; }
 .ce-cam { position: absolute; right: -2px; bottom: -2px; width: 28px; height: 28px; border-radius: 50%; background: var(--ink); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px var(--bg); }
 .ce-cam .ic { width: 16px; height: 16px; }
+
+/* 一起玩：画、海龟汤、问出题人 */
+.bub.draw { width: 168px; height: 168px; padding: 8px; background: #fff; color: var(--ink); box-shadow: inset 0 0 0 1px #DADAD7; border-radius: 14px; }
+.rec.me .bub.draw { background: #fff; color: var(--ink); }
+.bub.draw svg { width: 100%; height: 100%; display: block; }
+.bub.draw.none { display: flex; align-items: center; justify-content: center; color: var(--ink-3); }
+.card.game .cd-ic { background: var(--soft); color: var(--ink); }
+.rec.me .card.game { background: #262628; color: #fff; box-shadow: none; }
+.rec.me .card.game .cd-ic { background: #fff; color: var(--ink); }
+.rec.me .card.game .cd-foot { border-color: rgba(255,255,255,.12); color: rgba(255,255,255,.6); }
+.card.soup { width: 240px; background: #fff; color: var(--ink); box-shadow: inset 0 0 0 1px #DADAD7; }
+.sp-top { padding: 12px 14px 10px; }
+.sp-top small { display: block; font-size: 11.5px; letter-spacing: .1em; color: var(--ink-3); opacity: 1; }
+.card.soup .sp-top b { max-width: none; font-size: 15px; font-weight: 600; margin-top: 2px; white-space: normal; }
+.sp-top p { margin-top: 6px; font: 15px/1.7 var(--serif); white-space: pre-wrap; word-break: break-word; }
+.sp-foot { padding: 8px 14px 10px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-3); }
+.sp-lock { display: inline-flex; align-items: center; gap: 4px; }
+.sp-lock .ic { width: 14px; height: 14px; }
+.card.soup.open .sp-foot { background: #F5F5F2; color: var(--ink); }
+.sp-foot p { font: 14px/1.7 var(--serif); white-space: pre-wrap; word-break: break-word; }
+.sp-foot em { font-style: normal; font-size: 11.5px; letter-spacing: .1em; color: var(--ink-3); margin-right: 8px; font-family: var(--font); }
+.ch-mid { display: flex; justify-content: center; padding: 6px 12px; }
+.ask-t { font-style: normal; display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 6px; background: var(--ink); color: #fff; font-size: 12px; line-height: 20px; vertical-align: 1px; }
+.rec.me .ask-t { background: #fff; color: var(--ink); }
+/* 画板 */
+.dr-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 2px 18px 10px; }
+.dr-pad { width: min(100%, 360px); aspect-ratio: 1; background: #fff; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); touch-action: none; cursor: crosshair; }
+.dr-bar { display: flex; gap: 22px; }
+.dr-bar button { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--soft); color: var(--ink); }
+.dr-bar button.go { background: var(--ink); color: #fff; }
+.dr-bar button:disabled { opacity: .35; }

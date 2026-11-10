@@ -1,5 +1,6 @@
-// 备忘录：每个角色记得的关于你的事。每次聊天都会带给他；他写日记时也会自己加、删。你可以随便改：点一条改字，左滑点 × 删。
-import { h, Stack, page, btnIc, ask, swipeRow } from '../../core/ui.js';
+// 备忘录：每个角色记得的关于你的事。每次聊天都会带给他；他写日记时也会自己加、删。
+// 你可以随便改：点一条就在原地改（不弹框，下面 × ✓；改成空的就是删掉），左滑点 × 删，右上角 ＋ 在最底下新起一条。
+import { h, Stack, page, btnIc, swipeRow, inlineEdit, inlineEditing } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { md } from '../../core/time.js';
 import { charList } from '../diary/index.js';
@@ -21,29 +22,45 @@ export function mount(body, { close, arg }) {
     if (!c) return;
     const p = page({ title: D.nameOf(c), onBack: () => stack.pop(), right: btnIc('plus', () => add(), '记一条') });
     p.el.classList.add('mm');
-    async function add() {
-      const v = await ask(`让${D.nameOf(c)}记住`, '', '', true);
-      if (v?.trim()) D.setMemos(cid, [...D.memos(cid), { id: D.uid(), text: v.trim(), ts: Date.now() }]);
+    let stale = false;
+    const redraw = () => { if (inlineEditing()) { stale = true; return; } stale = false; drawList(); };
+    // ＋：最底下多出一条空的，直接打字，✓ 记下
+    function add() {
+      if (inlineEditing()) return;
+      p.scroll.querySelector('.empty')?.remove();
+      let box = p.scroll.querySelector('.mm-list');
+      if (!box) { box = h('div', { class: 'mm-list' }); p.scroll.append(box); }
+      const t = h('p');
+      const it = h('div', { class: 'mm-it new' }, h('span', { class: 'mm-n', text: D.memos(cid).length + 1 }), t);
+      box.append(it);
+      inlineEdit(t, '', {
+        save: (v) => { if (v) D.setMemos(cid, [...D.memos(cid), { id: D.uid(), text: v, ts: Date.now() }]); },
+        done: () => drawList(),
+      });
     }
     const drawList = () => {
       p.scroll.innerHTML = '';
-      p.scroll.append(h('div', { class: 'mm-head' }, h('b', { text: `${D.nameOf(c)}记得的关于你的事` })));
       const ms = D.memos(cid);
       if (!ms.length) { p.scroll.append(h('div', { class: 'empty', text: '还没有' })); return; }
       const box = h('div', { class: 'mm-list' });
       ms.forEach((m, i) => {
-        const it = h('button', { class: 'mm-it', onclick: async () => {
-          const v = await ask('改一下', m.text, '', true);
-          if (v == null) return;
-          if (!v.trim()) { D.setMemos(cid, D.memos(cid).filter((x) => x.id !== m.id)); return; }
-          m.text = v.trim(); D.setMemos(cid, D.memos(cid));
-        } }, h('span', { class: 'mm-n', text: i + 1 }), h('p', { text: m.text }), h('small', { text: (m.auto ? '他记的 · ' : '') + md(m.ts) }));
+        const t = h('p', { text: m.text });
+        const it = h('div', { class: 'mm-it', role: 'button', tabindex: 0 }, h('span', { class: 'mm-n', text: i + 1 }), t, h('small', { text: (m.auto ? '他记的 · ' : '') + md(m.ts) }));
+        it.addEventListener('click', () => {
+          if (inlineEditing() || t.isContentEditable) return;
+          it.classList.add('editing');
+          inlineEdit(t, m.text, {
+            // 改成空的 = 删掉这条
+            save: (v) => { if (!v) D.setMemos(cid, D.memos(cid).filter((x) => x.id !== m.id)); else if (v !== m.text) { m.text = v; D.setMemos(cid, D.memos(cid)); } },
+            done: () => drawList(),
+          });
+        });
         // 左滑露出红色那块（只有一个 ×），点了才删
         box.append(swipeRow(it, () => D.setMemos(cid, D.memos(cid).filter((x) => x.id !== m.id)), { icon: 'close' }));
       });
       p.scroll.append(box);
     };
-    const off = D.on('memo', (id) => id === cid && drawList());
+    const off = D.on('memo', (id) => id === cid && redraw());
     stack.push({ el: p.el, onDestroy: off });
     drawList();
   }

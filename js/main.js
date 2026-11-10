@@ -56,7 +56,7 @@ function fitViewport() {
     if (innerWidth >= 620) { dev.style.height = ''; dev.style.top = ''; document.body.classList.remove('kb'); return; }
     const p = innerHeight >= innerWidth;
     if (p !== portrait) { portrait = p; tall = 0; }
-    const typing = !!document.activeElement?.matches?.('input, textarea, [contenteditable="true"]');
+    const typing = !!document.activeElement?.matches?.('input, textarea, [contenteditable]:not([contenteditable="false"])');
     if (!typing) tall = Math.max(tall, vv.height, innerHeight);
     document.body.classList.toggle('kb', typing && tall - vv.height > 120);
     dev.style.height = vv.height + 'px';

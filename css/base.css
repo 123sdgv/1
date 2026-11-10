@@ -97,6 +97,24 @@ button.row:active { background: rgba(0,0,0,.04); }
 .step { display: flex; align-items: center; gap: 4px; }
 .step button { width: 34px; height: 30px; border-radius: 8px; background: var(--soft); font-size: 18px; }
 .step b { min-width: 52px; text-align: center; font-weight: 500; font-size: 15px; }
+/* 只能看的时候（资料页没点 ⭕）：开关、滑条、加减淡一点，点不动 */
+.sw:disabled { cursor: default; opacity: .5; }
+.slide:disabled { opacity: .45; }
+.slide:disabled::-webkit-slider-thumb { opacity: 0; }
+.step button:disabled { opacity: .3; }
+.row.ro .row-in { color: var(--ink-2); pointer-events: none; }
+/* 一大段字只占一行：点进去整页改 */
+.text-row .row-l { flex: none; }
+.text-row .row-v { flex: 1; text-align: right; max-width: none; color: var(--ink-3); }
+.tp, .tp .bar { background: var(--card); }
+.tp .scroll { display: flex; flex-direction: column; overflow: hidden; padding-bottom: var(--bot); }
+.tp-ta { flex: 1; width: 100%; min-height: 0; overflow-y: auto; border: 0; outline: 0; resize: none; background: none; padding: 14px 20px 30px; font-size: 16px; line-height: 1.75; -webkit-overflow-scrolling: touch; }
+.tp-ro { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 20px 30px; font-size: 16px; line-height: 1.75; white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; user-select: text; }
+/* 右上角的 ⭕ / ✅ */
+.ibtn.mode .ic { width: 24px; height: 24px; }
+/* 原地改字 */
+.ie-on { outline: 0; white-space: pre-wrap; word-break: break-word; caret-color: var(--ink); -webkit-user-select: text; user-select: text; min-height: 1.6em; }
+.ie-bar { margin-top: 8px; }
 
 /* ── 按钮 ── */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 46px; padding: 0 22px; border-radius: 14px; background: var(--ink); color: #fff; font-size: 16px; font-weight: 500; }
@@ -239,3 +257,13 @@ body.kb .so-tabs { display: none; }
    露出来的都是这个底色，黑色的话就像一块黑条压上来。主屏幕和锁屏还是黑的 */
 @media (max-width: 619px) { body.in-app:not(.locked), body.kb { background: var(--bg); } }
 .slide:focus { outline: none; }
+
+/* 原地改：几个地方的小调整 */
+.stk-it.editing small { white-space: normal; overflow: visible; min-width: 60px; padding: 2px 4px; border-radius: 6px; background: #fff; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); }
+.stk-it.editing .ie-bar { margin-top: 2px; }
+.stk-it.editing .ie-bar button { width: 30px; height: 30px; }
+.bs-it.editing > b { -webkit-line-clamp: unset; display: block; padding: 2px 6px; margin: 7px -6px 0; border-radius: 6px; background: #fff; box-shadow: inset 0 0 0 1px var(--line); }
+.ph.big:has(.ie-on) { flex-direction: column; align-items: stretch; }
+.ph .ie-on { caret-color: #fff; }
+.ph .ie-bar { padding: 0 16px 14px; position: relative; z-index: 1; }
+.cm-main .ie-on { padding: 2px 6px; margin: 0 -6px; border-radius: 6px; background: #fff; box-shadow: inset 0 0 0 1px var(--line); }

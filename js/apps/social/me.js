@@ -1,10 +1,11 @@
-// 我的：当前身份的资料、邮箱、人设、世界观、动态封面。切换 / 新建 / 删除身份都在左上角头像点出来的面板里
-import { h, avatar, group, row, inputRow, areaRow, toast, confirm, sheet, icon, menu, longPress } from '../../core/ui.js';
+// 我的：当前身份的资料、邮箱、人设、世界观（一行，点进去整页改）、动态封面。切换 / 新建 / 删除身份都在左上角头像点出来的面板里
+import { h, avatar, group, row, inputRow, textRow, toast, confirm, sheet, icon, menu, longPress } from '../../core/ui.js';
 import { pickCrop } from '../../core/crop.js';
 import * as D from '../../core/data.js';
 
 export function mePane(ctx) {
   const el = h('div', { class: 'so-pane scroll' });
+  const nav = { push: (p) => ctx.push(p), pop: () => ctx.stack.pop() };
   const draw = () => {
     const a = D.curAccount();
     el.innerHTML = '';
@@ -17,8 +18,9 @@ export function mePane(ctx) {
         inputRow({ label: '签名', value: a.sign, onchange: (v) => D.saveAccount({ ...D.curAccount(), sign: v.trim() }) }),
         mailRow(a),
         row({ label: '动态封面', value: a.cover ? '已设置' : '默认', onclick: () => coverMenu() })),
-      group('我的人设', areaRow({ value: a.persona, rows: 5, onchange: (v) => D.saveAccount({ ...D.curAccount(), persona: v }) })),
-      group('世界观', areaRow({ value: a.world, rows: 5, onchange: (v) => D.saveAccount({ ...D.curAccount(), world: v }) })),
+      // 人设、世界观：一行，点进去整页改，右上角 ✓ 直接存
+      group('', textRow({ label: '我的人设', value: a.persona, nav, onSave: (v) => D.saveAccount({ ...D.curAccount(), persona: v }) }),
+        textRow({ label: '世界观', value: a.world, nav, onSave: (v) => D.saveAccount({ ...D.curAccount(), world: v }) })),
     );
   };
   // 邮箱：只填 @ 前面的，一个身份一个

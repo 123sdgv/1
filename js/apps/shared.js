@@ -1,5 +1,5 @@
 // 几个 App 共用的小东西：文字照片、看照片、选角色、转发的聊天记录卡片
-import { h, sheet, avatar } from '../core/ui.js';
+import { h, sheet, avatar, inlineEdit, toast } from '../core/ui.js';
 import * as D from '../core/data.js';
 import { md, hm } from '../core/time.js';
 
@@ -14,11 +14,14 @@ export function photoTile(desc, { cls = '', onclick = null, full = false } = {})
   return h(onclick ? 'button' : 'div', { class: 'ph ' + cls, style: { background: tone(desc) }, onclick },
     h('span', { class: 'ph-txt' + (full ? ' full' : ''), text: desc }));
 }
-export function viewPhoto(p) {
+/** 看照片。edit(新的描述) 给了就是一打开就在那段字上改（下面 × ✓） */
+export function viewPhoto(p, { edit = null } = {}) {
   const who = p.who && p.who !== 'me' ? D.nameOf(D.charById(p.who)) : '我';
-  sheet({ title: '照片', body: h('div', { class: 'ph-view' },
-    h('div', { class: 'ph big', style: { background: tone(p.desc) } }, h('span', { class: 'ph-txt full', text: p.desc })),
+  const txt = h('span', { class: 'ph-txt full', text: p.desc });
+  const s = sheet({ title: '照片', body: h('div', { class: 'ph-view' },
+    h('div', { class: 'ph big', style: { background: tone(p.desc) } }, txt),
     p.ts ? h('p', { class: 'ph-meta', text: `${who} · ${md(p.ts)} ${hm(p.ts)}` }) : null) });
+  if (edit) setTimeout(() => inlineEdit(txt, p.desc, { save: (v) => { if (!v) { toast('不能是空的'); return false; } if (v !== p.desc) edit(v); }, done: () => s.close() }), 380);
 }
 
 /** 书的封面：按书名算一个固定的深灰，书名竖着写。mini = 小图不写字；kids = 叠在封面上的东西（比如一起读的人的头像） */

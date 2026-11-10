@@ -7,6 +7,7 @@ export const APPS = [
   { id: 'calendar', name: '日历', load: () => import('../apps/calendar/index.js') },
   { id: 'mail', name: '邮箱', load: () => import('../apps/mail/index.js') },
   { id: 'read', name: '阅读', load: () => import('../apps/read/index.js') },
+  { id: 'tarot', name: '塔罗', load: () => import('../apps/tarot/index.js') },
   { id: 'album', name: '相册', load: () => import('../apps/album/index.js') },
   { id: 'weather', name: '天气', load: () => import('../apps/weather/index.js') },
   { id: 'settings', name: '设置', load: () => import('../apps/settings/index.js') },

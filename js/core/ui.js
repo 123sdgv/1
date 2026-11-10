@@ -90,6 +90,9 @@ const P = {
   toc: '<path d="M9 7h10.4M9 12h10.4M9 17h10.4"/><circle cx="5" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="5" cy="17" r="1" fill="currentColor" stroke="none"/>',
   fileIn: '<path d="M7 3.8h7l4 4v11.4a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.8a1 1 0 0 1 1-1z"/><path d="M13.6 4v4.2h4.2"/><path d="M12 10.6v6.2M9.4 14.2 12 16.8l2.6-2.6"/>',
   aa: '<path d="M3.6 18.4 8.4 5.8l4.8 12.6M5.4 14h6"/><circle cx="17.6" cy="15.7" r="2.7"/><path d="M20.3 12.2v6.2"/>',
+  dice: '<rect x="4.4" y="4.4" width="15.2" height="15.2" rx="3.4"/><circle cx="8.8" cy="8.8" r="1.15" fill="currentColor" stroke="none"/><circle cx="15.2" cy="8.8" r="1.15" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="8.8" cy="15.2" r="1.15" fill="currentColor" stroke="none"/><circle cx="15.2" cy="15.2" r="1.15" fill="currentColor" stroke="none"/>',
+  eye: '<path d="M2.8 12s3.4-6.2 9.2-6.2 9.2 6.2 9.2 6.2-3.4 6.2-9.2 6.2S2.8 12 2.8 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  brush: '<path d="M14.6 5.6 18.4 9.4 10.6 17.2a3 3 0 0 1-2.1.9H5.8v-2.7a3 3 0 0 1 .9-2.1z"/><path d="M13 7.2l3.8 3.8"/>',
 };
 export const icon = (name, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 export const ic = (name, cls) => h('span', { class: 'ico', html: icon(name, cls) });
@@ -173,8 +176,11 @@ export class Stack {
       id = null;
       if (!live) return;
       live = false;
-      const W = host.clientWidth, go = dx > W * 0.32 || (vx > 0.45 && dx > 30);
-      const pg = this.top, under = this.pages[this.pages.length - 2];
+      const W = host.clientWidth, pg = this.top, under = this.pages[this.pages.length - 2];
+      // 这页有没保存的改动（guard 返回 true）：滑回去，交给它自己的返回（会问要不要保存）
+      const blocked = pg.guard?.();
+      const go = !blocked && (dx > W * 0.32 || (vx > 0.45 && dx > 30));
+      if (blocked && dx > 30) setTimeout(() => pg.onBack?.(), 230);
       if (go) { pg.el.style.transform = ''; pg.shade.style.opacity = ''; this.pop(dx); }
       else {
         const p = dx / W;
@@ -383,10 +389,12 @@ export function row({ label, value = '', icon: icn = null, onclick = null, chev 
     right || h('span', { class: 'row-v', text: value }),
     chev ? ic('chev', 'chev') : null);
 }
-export function inputRow({ label, value = '', placeholder = '', type = 'text', onchange, inputmode = null }) {
-  const inp = h('input', { class: 'row-in', value, placeholder, type, inputmode, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
-  inp.addEventListener('change', () => onchange && onchange(inp.value));
-  return h('label', { class: 'row' }, h('span', { class: 'row-l', text: label }), inp);
+// ro = 只能看（资料页没点 ⭕ 的时候）
+// live = 每打一个字都回调（草稿用；直接存盘的别开）
+export function inputRow({ label, value = '', placeholder = '', type = 'text', onchange, inputmode = null, ro = false, live = false }) {
+  const inp = h('input', { class: 'row-in', value, placeholder, type, inputmode, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', readonly: ro, tabindex: ro ? -1 : null });
+  inp.addEventListener(live ? 'input' : 'change', () => onchange && onchange(inp.value));
+  return h('label', { class: 'row' + (ro ? ' ro' : '') }, h('span', { class: 'row-l', text: label }), inp);
 }
 export function areaRow({ value = '', placeholder = '', onchange, rows = 4 }) {
   const ta = h('textarea', { class: 'row-ta', placeholder, rows });
@@ -395,32 +403,32 @@ export function areaRow({ value = '', placeholder = '', onchange, rows = 4 }) {
   autosize(ta);
   return h('div', { class: 'row tall' }, ta);
 }
-export function toggleRow({ label, value, onchange, sub = '' }) {
-  const sw = h('input', { type: 'checkbox', class: 'sw' });
+export function toggleRow({ label, value, onchange, sub = '', ro = false }) {
+  const sw = h('input', { type: 'checkbox', class: 'sw', disabled: ro });
   sw.checked = !!value;
   sw.addEventListener('change', () => onchange && onchange(sw.checked));
   return h('label', { class: 'row' }, h('span', { class: 'row-l' }, label, sub ? h('small', { text: sub }) : null), sw);
 }
-export function stepRow({ label, value, min, max, step = 1, unit = '', onchange }) {
+export function stepRow({ label, value, min, max, step = 1, unit = '', onchange, ro = false }) {
   let v = value;
   const out = h('b', { text: v + unit });
   const set = (n) => { v = Math.max(min, Math.min(max, Math.round(n * 100) / 100)); out.textContent = v + unit; onchange && onchange(v); };
-  return h('div', { class: 'row' }, h('span', { class: 'row-l', text: label }),
-    h('div', { class: 'step' }, h('button', { text: '−', onclick: () => set(v - step) }), out, h('button', { text: '+', onclick: () => set(v + step) })));
+  return h('div', { class: 'row' + (ro ? ' ro' : '') }, h('span', { class: 'row-l', text: label }),
+    h('div', { class: 'step' }, h('button', { text: '−', disabled: ro, onclick: () => set(v - step) }), out, h('button', { text: '+', disabled: ro, onclick: () => set(v + step) })));
 }
 
 /** 滑条：名字和数值在上，滑条在下 */
-export function slideRow({ label, value, min, max, step = 1, fmt = (v) => String(v), onchange }) {
+export function slideRow({ label, value, min, max, step = 1, fmt = (v) => String(v), onchange, ro = false }) {
   const out = h('b', { text: fmt(value) });
-  const r = h('input', { type: 'range', class: 'slide', min, max, step, value });
+  const r = h('input', { type: 'range', class: 'slide', min, max, step, value, disabled: ro });
   const paint = () => r.style.setProperty('--p', ((r.value - min) / (max - min)) * 100 + '%');
   r.addEventListener('input', () => { out.textContent = fmt(+r.value); paint(); onchange && onchange(+r.value); });
   paint();
-  return h('div', { class: 'row slide-row' }, h('div', { class: 'slide-top' }, h('span', { class: 'row-l', text: label }), out), r);
+  return h('div', { class: 'row slide-row' + (ro ? ' ro' : '') }, h('div', { class: 'slide-top' }, h('span', { class: 'row-l', text: label }), out), r);
 }
 /** 开关 + 打开了才展开的几行（关掉就收起来） */
-export function foldRow({ label, value, onchange, kids = [] }) {
-  const sw = h('input', { type: 'checkbox', class: 'sw' });
+export function foldRow({ label, value, onchange, kids = [], ro = false }) {
+  const sw = h('input', { type: 'checkbox', class: 'sw', disabled: ro });
   sw.checked = !!value;
   const fold = h('div', { class: 'fold' + (value ? ' open' : '') }, h('div', { class: 'fold-in' }, kids));
   sw.addEventListener('change', () => { fold.classList.toggle('open', sw.checked); onchange && onchange(sw.checked); });
@@ -458,6 +466,98 @@ export async function shrink(file, max, quality, square) {
   cv.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
   URL.revokeObjectURL(url);
   return cv.toDataURL('image/jpeg', quality);
+}
+
+// ── 原地改字（不弹框）──
+/** 让一块字变成能直接打字的（只收纯文字，粘贴也去掉格式） */
+export function setEditable(el, on = true) {
+  if (!on) { el.removeAttribute('contenteditable'); return; }
+  el.setAttribute('contenteditable', 'plaintext-only');
+  if (el.contentEditable !== 'plaintext-only') el.setAttribute('contenteditable', 'true');
+  if (!el._paste) { el._paste = true; el.addEventListener('paste', (e) => { if (!el.isContentEditable) return; e.preventDefault(); document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') || ''); }); }
+}
+/** 能打字的那块里现在的字 */
+export const editableText = (el) => el.innerText.replace(/\r/g, '').replace(/ /g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+/** 光标放到最后 */
+export function caretEnd(el) {
+  el.focus();
+  const sel = getSelection(), rg = document.createRange();
+  rg.selectNodeContents(el); rg.collapse(false);
+  sel.removeAllRanges(); sel.addRange(rg);
+}
+let inlineOn = 0;
+/** 有没有哪块正在原地改（正在改的时候别重画那一页） */
+export const inlineEditing = () => inlineOn > 0;
+/**
+ * 原地改一块字：那一块变成能打字的，下面冒出 × ✓。
+ * save(新的字) 返回 false = 不收（比如空的），接着改；done() 改完（不管存没存）调一次，一般用来重画。
+ */
+export function inlineEdit(block, value, { save, done, oneLine = false } = {}) {
+  inlineOn++;
+  block.classList.add('ie-on');
+  block.textContent = value;
+  setEditable(block);
+  let over = false;
+  const finish = (ok) => {
+    if (over) return;
+    if (ok && save && save(editableText(block)) === false) return;
+    over = true; inlineOn--;
+    bar.remove();
+    setEditable(block, false);
+    block.classList.remove('ie-on');
+    document.activeElement?.blur();
+    done && done();
+  };
+  if (oneLine) block.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); finish(true); } });
+  const bar = h('div', { class: 'os-ed-bar ie-bar' },
+    h('button', { 'aria-label': '不改了', html: icon('close'), onclick: (e) => { e.stopPropagation(); finish(false); } }),
+    h('button', { class: 'ok', 'aria-label': '改好了', html: icon('check'), onclick: (e) => { e.stopPropagation(); finish(true); } }));
+  for (const b of bar.children) b.addEventListener('pointerdown', (e) => e.preventDefault()); // 点按钮不先收键盘
+  block.after(bar);
+  caretEnd(block);
+  setTimeout(() => bar.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 350);
+  return { finish };
+}
+
+// ── 资料页这类：右上角 ⭕ 点了才能改，变成 ✅；点 ✅ 问一句再存；改到一半要走也问一句 ──
+/** 右上角那个圆圈按钮。set(true) 变成 ✅ */
+export function modeBtn(onclick, label = '修改') {
+  const b = h('button', { class: 'ibtn mode', 'aria-label': label, html: icon('ring'), onclick });
+  b.set = (on) => { b.innerHTML = icon(on ? 'ringck' : 'ring'); b.setAttribute('aria-label', on ? '改好了' : label); b.classList.toggle('on', on); };
+  return b;
+}
+export const askSave = () => dialog({ title: '保存修改？', buttons: [['取消', false], ['保存', true, 'main']] });
+/** 改了还没存就要走：'save' / 'drop' / null（接着改） */
+export const askLeave = () => dialog({ title: '改的还没保存', buttons: [['不保存', 'drop', 'danger'], ['接着改', null], ['保存', 'save', 'main']] });
+
+/**
+ * 一大段字（人设、世界观…）在表单里只占一行：名字 + 开头几个字，点进去是一整页空白的地方打字，右上角 ✓ 存。
+ * nav = { push(页), pop() }（这个 App 的页面栈）；ro = 只能看；onSave(新的字)
+ */
+export function textRow({ label, value = '', title = label, nav, onSave, ro = false }) {
+  const first = String(value || '').split('\n').map((s) => s.trim()).find(Boolean) || '';
+  return h('button', { class: 'row text-row', onclick: () => textPage({ title, value, nav, onSave, ro }) },
+    h('span', { class: 'row-l', text: label }),
+    h('span', { class: 'row-v', text: first }),
+    ic('chev', 'chev'));
+}
+export function textPage({ title, value = '', nav, onSave, ro = false }) {
+  const v0 = String(value || '');
+  const box = ro ? h('div', { class: 'tp-ro' }, v0) : h('textarea', { class: 'tp-ta', spellcheck: 'false' });
+  if (!ro) box.value = v0;
+  const dirty = () => !ro && box.value !== v0;
+  const ok = ro ? null : h('button', { class: 'ibtn', 'aria-label': '存好', html: icon('check'), onclick: () => { box.blur(); onSave && onSave(box.value); nav.pop(); } });
+  const back = async () => {
+    if (!dirty()) { nav.pop(); return; }
+    box.blur();
+    const r = await askLeave();
+    if (r === 'save') { onSave && onSave(box.value); nav.pop(); }
+    else if (r === 'drop') nav.pop();
+  };
+  const p = page({ title, onBack: back, right: ok, cls: 'tp' });
+  p.scroll.append(box);
+  nav.push({ el: p.el, guard: dirty, onBack: back });
+  if (!ro && !v0) setTimeout(() => box.focus(), 380);
 }
 
 /** 多行文字 → 段落（保留换行） */

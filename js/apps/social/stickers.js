@@ -1,8 +1,8 @@
 // 表情包：所有身份、所有角色共用的一套图。每张配一句说明（这张是什么意思），角色按说明挑着用。
-import { h, sheet, menu, ask, confirm, toast, longPress, icon } from '../../core/ui.js';
+import { h, sheet, menu, confirm, toast, longPress, icon, inlineEdit } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 
-/** 表情包面板：点一张就是选它；最后一格是添加；长按改说明、删除 */
+/** 表情包面板：点一张就是选它；最后一格是添加；长按改说明（原地改）、删除 */
 export function stickerSheet(onPick) {
   const grid = h('div', { class: 'stk-grid' });
   const s = sheet({ title: '表情包', body: h('div', {}, grid) });
@@ -11,11 +11,12 @@ export function stickerSheet(onPick) {
     for (const st of D.stickers()) {
       const b = h('button', { class: 'stk-it', onclick: () => { s.close(); onPick(st); } }, h('img', { src: st.src, alt: st.name, draggable: 'false' }), h('small', { text: st.name }));
       longPress(b, () => menu([
-        ['改说明', async () => {
-          const v = await ask('这张是什么意思', st.name, '');
-          if (!v?.trim()) return;
-          D.setStickers(D.stickers().map((x) => (x.id === st.id ? { ...x, name: v.trim() } : x)));
-          draw();
+        // 改说明：就在这张下面那行字上改（不弹框）
+        ['改说明', () => {
+          const lb = h('small');
+          const box = h('div', { class: 'stk-it editing' }, h('img', { src: st.src, alt: '', draggable: 'false' }), lb);
+          b.replaceWith(box);
+          inlineEdit(lb, st.name, { oneLine: true, save: (v) => { if (!v) { toast('写一下是什么意思'); return false; } D.setStickers(D.stickers().map((x) => (x.id === st.id ? { ...x, name: v } : x))); }, done: () => draw() });
         }],
         ['删掉', async () => { if (await confirm('删掉这张表情？', '', '删掉', true)) { D.setStickers(D.stickers().filter((x) => x.id !== st.id)); draw(); } }, 'danger'],
       ], st.name));

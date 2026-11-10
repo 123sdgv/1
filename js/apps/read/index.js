@@ -2,7 +2,7 @@
 // 读的页面学网文 App：大字、首行缩进、段尾一个小气泡写着几条段评，点开从下面冒出半屏的段评；背景能换图、调大小模糊和淡、调字号。
 // 一次上传一章（一段文字一章，也能从 .txt 导进来）。长按一段写段评。
 // 一起读：在聊天里点加号把书发给角色，他就跟着你一章一章读（core/read.js）。这里只看：谁在读、读到哪、他的读书笔记。
-import { h, Stack, page, avatar, icon, btnIc, toast, confirm, ask, longPress, autosize, sheet, popbar, group, row, toggleRow, slideRow, pickImage, paras } from '../../core/ui.js';
+import { h, Stack, page, avatar, icon, btnIc, toast, confirm, ask, longPress, autosize, sheet, popbar, group, row, toggleRow, slideRow, pickImage, paras, inlineEdit, inlineEditing } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import * as R from '../../core/read.js';
 import { hm, ago } from '../../core/time.js';
@@ -41,7 +41,13 @@ export function mount(body, { close, arg }) {
       const it = h('button', { class: 'bs-it', onclick: () => openBook(b.id) }, cv, h('b', { text: b.title }),
         h('small', { text: n ? (i >= 0 ? `${i + 1} / ${n} 章` : `${n} 章`) + (b.done ? ' · 完结' : '') : '' }));
       longPress(it, (e) => popbar(cv, [
-        ['edit', async () => { const t = await ask('书名', b.title); if (t?.trim()) D.saveBook({ ...D.bookById(b.id), title: t.trim() }); }, '改书名'],
+        // 改书名：就在封面下面那行改（不弹框）
+        ['edit', () => {
+          const t = it.querySelector('b');
+          const box = h('div', { class: 'bs-it editing' }, ...it.childNodes);
+          it.replaceWith(box);
+          inlineEdit(t, b.title, { oneLine: true, save: (v) => { if (!v) { toast('书名不能是空的'); return false; } if (v !== b.title) D.saveBook({ ...D.bookById(b.id), title: v }); }, done: () => drawShelf() });
+        }, '改书名'],
         ['trash', async () => { if (await confirm(`删除《${b.title}》？`, '章节和段评都会删掉。', '删除', true)) D.removeBook(b.id); }, '删除'],
       ], { x: e.clientX, y: e.clientY }));
       grid.append(it);
@@ -305,11 +311,15 @@ export function mount(body, { close, arg }) {
         // 楼里的回复：回的是楼主就不写「回复谁」，回的是楼里别人才写
         if (to?.to) txt.append(h('span', { class: 'cm-to', text: `回复 ${whoOf(to.who).name}：` }));
         txt.append(x.text);
-        const el = h('div', { class: 'cm-it' + (isRe ? ' re' : '') + (x.fresh || freshAtOpen.has(x.id) ? ' fresh' : ''), onclick: () => { if (x.who !== 'me') setReply(x); } },
+        const el = h('div', { class: 'cm-it' + (isRe ? ' re' : '') + (x.fresh || freshAtOpen.has(x.id) ? ' fresh' : ''), onclick: () => { if (x.who !== 'me' && !txt.isContentEditable) setReply(x); } },
           avatar(w.avatar, w.name, isRe ? 'xs' : 'sm'),
           h('div', { class: 'cm-main' }, h('b', { text: w.name }), txt, h('small', { text: ago(x.ts) })));
         longPress(el, (e) => popbar(el, [
-          ['edit', async () => { const v = await ask('改段评', x.text, '', true); if (v?.trim()) { D.setBookCmts(bid, D.bookCmts(bid).map((y) => (y.id === x.id ? { ...y, text: v.trim() } : y))); } }, '编辑'],
+          // 编辑：就在这条上改（不弹框）
+          ['edit', () => {
+            txt.querySelector('.cm-to')?.remove();
+            inlineEdit(txt, x.text, { save: (v) => { if (!v) { toast('不能是空的'); return false; } if (v !== x.text) D.setBookCmts(bid, D.bookCmts(bid).map((y) => (y.id === x.id ? { ...y, text: v } : y))); }, done: () => draw() });
+          }, '编辑'],
           ['trash', () => {
             // 回它的也一起删
             const all = D.bookCmts(bid), drop = new Set([x.id]);
@@ -330,7 +340,7 @@ export function mount(body, { close, arg }) {
         const r = pEl.getBoundingClientRect(), sr = p.scroll.getBoundingClientRect();
         if (r.bottom > sr.top + sr.height * 0.44 || r.top < sr.top) p.scroll.scrollTo({ top: Math.max(0, pEl.offsetTop - 24), behavior: 'smooth' });
       }
-      const offA = D.on('bookcm', (id) => { if (id === bid) { draw(); } });
+      const offA = D.on('bookcm', (id) => { if (id === bid && !inlineEditing()) { draw(); } });
       const off = () => { offA(); seen(); pEl?.classList.remove('on'); };
       draw();
       seen();

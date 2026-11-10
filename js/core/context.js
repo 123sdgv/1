@@ -2,6 +2,7 @@
 import * as D from './data.js';
 import * as T from './prompt.js';
 import { partText, fwdText } from './parse.js';
+import { gameOf } from './game.js';
 import { full, span, sep, ymd, hm, md, rangeText, monthText } from './time.js';
 import { weatherLine } from './weather.js';
 
@@ -111,10 +112,12 @@ function windowOf(list, limit) {
 function historyMsgs(list, acc, limit) {
   const out = [];
   let prev = 0;
+  // 你画的画：只有最近那幅给他看字符网格，前面的省掉
+  const lastDraw = [...list].reverse().find((r) => r.role === 'me' && D.partsOf(r).some((p) => p.t === 'draw'))?.id;
   for (const r of windowOf(list, limit)) {
     const parts = D.partsOf(r);
     if (!parts.length) continue;
-    let text = parts.map(partText).filter(Boolean).join('\n');
+    let text = parts.map((p) => partText(p, r.id === lastDraw)).filter(Boolean).join('\n');
     if (r.ts - prev > 3600000) text = T.stamp(sep(r.ts)) + '\n' + text;
     prev = r.ts;
     if (r.role === 'them') out.push({ role: 'assistant', content: text });
@@ -187,6 +190,7 @@ export function buildChat(c, { extra = null, uptoId = null, skipId = null, canSe
     T.recalledText(recalledOf(c, lastUserText(list))),
     T.activity(activityOf(c)),
     T.reading(readingOf(c)),
+    T.gameHint({ g: gameOf(list), me }),
     search ? T.searchResult({ me, ...search }) : '',
   ] }));
 }

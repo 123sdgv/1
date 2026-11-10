@@ -27,7 +27,8 @@ export function mount(body, { close }) {
       if (d !== day) { day = d; pg.scroll.append(h('div', { class: 'alb-day', text: d })); grid = h('div', { class: 'ph-grid' }); pg.scroll.append(grid); }
       const t = photoTile(p.desc, { onclick: () => viewPhoto(p) });
       longPress(t, () => menu([
-        ['编辑画面', async () => { const v = await ask('编辑画面', p.desc, '', true); if (v?.trim()) { p.desc = v.trim(); D.setPhotos(D.photos()); } }],
+        // 编辑画面：打开大图，在那段字上直接改（不弹框）
+        ['编辑画面', () => viewPhoto(p, { edit: (v) => { p.desc = v; D.setPhotos(D.photos()); } })],
         ['删除', async () => { if (await confirm('删除这张照片？', '', '删除', true)) D.setPhotos(D.photos().filter((x) => x.id !== p.id)); }, 'danger'],
       ]));
       grid.append(t);

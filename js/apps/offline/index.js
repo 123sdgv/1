@@ -2,7 +2,7 @@
 //   和社交里的角色见面（带着他的人设、你的人设、世界观、记忆、最近的聊天）
 //   自己写的一段（像酒馆：这段故事自己的角色、世界观、你是谁、开场，跟社交没关系，哪个身份下都看得到）
 // 长按一段冒出黑色小条：重新回复 · 编辑 · 删除（没有引用）。编辑就在原地改。
-import { h, Stack, page, avatar, icon, btnIc, menu, toast, confirm, longPress, autosize, paras, inputRow, areaRow, group, row, popbar } from '../../core/ui.js';
+import { h, Stack, page, avatar, icon, btnIc, menu, toast, confirm, longPress, autosize, paras, inputRow, textRow, group, row, popbar, modeBtn, askSave, askLeave } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import * as CS from '../../core/chat.js';
 import { short } from '../../core/time.js';
@@ -41,18 +41,53 @@ export function mount(body, { close, arg }) {
   draw();
 
   // ── 新建 / 设置：和谁（社交里的角色，或者自己写）、标题、场景；自己写的还有角色、世界观、我、模型参数 ──
+  // 大段的字（人设、世界观、我、开场、场景）都是一行，点进去整页改。
+  // 设置（已经有的这段）：平时只能看，右上角 ⭕ 点了才能改，变 ✅，点 ✅ 问一句再存；改到一半要走也问一句。新的一段一进来就能改，右上角「开始」。
   function storyForm(sid, presetChar = null) {
     const old = sid ? D.stories().find((s) => s.id === sid) : null;
     const isNew = !old;
-    const v = isNew ? { char: presetChar, title: '', scene: '', card: blankCard() } : structuredClone(old);
-    if (!v.card) v.card = blankCard();
-    v.card.gen = D.genOf(v.card);
-    const ok = h('button', { class: 'tbtn', text: isNew ? '开始' : '保存' });
-    const p = page({ title: isNew ? '新的一段' : '设置', onBack: () => stack.pop(), right: ok });
+    const load = () => {
+      const x = isNew ? { char: presetChar, title: '', scene: '', card: blankCard() } : structuredClone(D.stories().find((s) => s.id === sid) || old);
+      if (!x.card) x.card = blankCard();
+      x.card.gen = D.genOf(x.card);
+      return x;
+    };
+    let v = load(), editing = isNew, snap = JSON.stringify(v);
+    const changed = () => JSON.stringify(v) !== snap;
+    const ok = isNew ? h('button', { class: 'tbtn', text: '开始' }) : modeBtn(() => (editing ? commit() : startEdit()));
+    const p = page({ title: isNew ? '新的一段' : '设置', onBack: () => back(), right: ok });
     p.el.classList.add('off-form');
     const form = h('div');
     p.scroll.append(form);
+    const nav = { push: (x) => stack.push(x), pop: () => stack.pop() };
+    const wait = () => new Promise((r) => setTimeout(r, 30));
+    function startEdit() { v = load(); snap = JSON.stringify(v); editing = true; ok.set(true); drawForm(); }
+    async function back() {
+      document.activeElement?.blur();
+      await wait();
+      if (isNew || !editing || !changed()) { stack.pop(); return; }
+      const r = await askLeave();
+      if (r === 'save') { if (save()) stack.pop(); }
+      else if (r === 'drop') stack.pop();
+    }
+    async function commit() {
+      document.activeElement?.blur();
+      await wait();
+      if (changed()) { if (!(await askSave())) return; if (!save()) return; toast('保存了'); }
+      editing = false; ok.set(false); drawForm();
+    }
+    function save() {
+      if (!v.char && !v.card.name) { toast('写一下角色的名字'); return null; }
+      const c = v.char ? D.charById(v.char) : null;
+      const st = D.saveStory({ ...v, acc: c ? c.acc : null, card: c ? undefined : v.card, title: v.title || (c ? '见面' : v.card.name), id: v.id || D.uid(), createdAt: v.createdAt || Date.now(), lastTs: v.lastTs || Date.now() });
+      v = structuredClone(st);
+      if (!v.card) v.card = blankCard();
+      v.card.gen = D.genOf(v.card);
+      snap = JSON.stringify(v);
+      return st;
+    }
     const drawForm = () => {
+      const ro = !editing;
       form.innerHTML = '';
       const chars = D.chars();
       if (isNew) {
@@ -61,38 +96,34 @@ export function mount(body, { close, arg }) {
           chars.map((c) => h('button', { class: 'os-who-it' + (v.char === c.id ? ' on' : ''), onclick: () => pick(c.id) }, avatar(c.avatar, D.nameOf(c)), h('small', { text: D.nameOf(c) }))),
           h('button', { class: 'os-who-it' + (!v.char ? ' on' : ''), onclick: () => pick(null) }, h('span', { class: 'av os-own', html: icon('edit') }), h('small', { text: '自己写' }))));
       }
-      form.append(group('', inputRow({ label: '标题', value: v.title, onchange: (x) => { v.title = x.trim(); } })));
-      if (v.char) {
-        form.append(group('场景', areaRow({ value: v.scene, rows: 5, onchange: (x) => { v.scene = x; } })));
-      } else {
+      const tRow = (label, get, set, title = label) => textRow({ label, title, value: get(), nav, ro, onSave: (x) => { set(x); drawForm(); } });
+      form.append(group('', inputRow({ label: '标题', value: v.title, ro, live: true, onchange: (x) => { v.title = x.trim(); } }),
+        v.char ? tRow('场景', () => v.scene, (x) => { v.scene = x; }) : null));
+      if (!v.char) {
         const cd = v.card;
         form.append(
-          group('角色', inputRow({ label: '名字', value: cd.name, onchange: (x) => { cd.name = x.trim(); } }), areaRow({ value: cd.persona, rows: 6, onchange: (x) => { cd.persona = x; } })),
-          group('世界观', areaRow({ value: cd.world, rows: 5, onchange: (x) => { cd.world = x; } })),
-          group('我', inputRow({ label: '名字', value: cd.meName, onchange: (x) => { cd.meName = x.trim(); } }), areaRow({ value: cd.me, rows: 4, onchange: (x) => { cd.me = x; } })),
-          group('开场', areaRow({ value: v.scene, rows: 5, onchange: (x) => { v.scene = x; } })),
-          group('模型', ...genRows(cd.gen)));
+          group('角色', inputRow({ label: '名字', value: cd.name, ro, live: true, onchange: (x) => { cd.name = x.trim(); } }), tRow('人设', () => cd.persona, (x) => { cd.persona = x; }, '角色人设')),
+          group('我', inputRow({ label: '名字', value: cd.meName, ro, live: true, onchange: (x) => { cd.meName = x.trim(); } }), tRow('人设', () => cd.me, (x) => { cd.me = x; }, '我的人设')),
+          group('', tRow('世界观', () => cd.world, (x) => { cd.world = x; }), tRow('开场', () => v.scene, (x) => { v.scene = x; })),
+          group('模型', ...genRows(cd.gen, ro)));
       }
-      if (!isNew) form.append(group('', row({ label: '删除这段', cls: 'danger center', chev: false, onclick: async () => {
+      if (!isNew && editing) form.append(group('', row({ label: '删除这段', cls: 'danger center', chev: false, onclick: async () => {
         if (!(await confirm('删除这段线下剧情？', '', '删除', true))) return;
         D.removeStory(old.id);
         while (stack.pages.length > 1) { const x = stack.pages.pop(); x.el.remove(); x.shade?.remove(); x.onDestroy?.(); }
         stack.top.el.style.transform = '';
       } })));
     };
-    ok.onclick = () => {
+    if (isNew) ok.onclick = async () => {
       document.activeElement?.blur();
-      setTimeout(() => {
-        if (!v.char && !v.card.name) { toast('写一下角色的名字'); return; }
-        const c = v.char ? D.charById(v.char) : null;
-        const st = D.saveStory({ ...v, acc: c ? c.acc : null, card: c ? undefined : v.card, title: v.title || (c ? '见面' : v.card.name), id: v.id || D.uid(), createdAt: v.createdAt || Date.now(), lastTs: v.lastTs || Date.now() });
-        stack.pop();
-        if (isNew) setTimeout(() => openStory(st.id, true), 360);
-        else { stack.top.setTitle?.(st.title); toast('保存了'); }
-      }, 30);
+      await wait();
+      const st = save();
+      if (!st) return;
+      stack.pop();
+      setTimeout(() => openStory(st.id, true), 360);
     };
     drawForm();
-    stack.push({ el: p.el });
+    stack.push({ el: p.el, guard: () => !isNew && editing && changed(), onBack: back });
   }
 
   // ── 一段剧情 ──

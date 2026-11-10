@@ -13,6 +13,12 @@
 //   [搜索 关键词]                         —— 他想查点东西（设了搜索才有）：搜完把结果给他，再接着回
 //   [撤回]                                —— 他撤回自己刚发的上一条（也认 [撤回 那条里的几个字]）。撤回的那条变成部件
 //                                            { t: 'recall', by: 'me'|'them', was: 原来的部件 }，聊天里只显示一行「X 撤回了一条消息」
+//   一起玩（core/game.js）：
+//   [画 答案] {"lines":[[x,y,x,y…]…]}       —— 你画我猜，他画一幅（答案不显示）→ { t: 'draw', by: 'them', ans, lines }；你画的是 by: 'me'
+//   [海龟汤 汤底：真相] 汤面                —— 他出一道海龟汤（汤底不显示）→ { t: 'soup', by: 'them', face, bottom, revealed }；一起猜时出题人出的是 by: 'host'
+//   [揭晓]                                —— 他公布汤底（动作）
+//   [问] 是非题                            —— 一起猜海龟汤时他问出题人 → { t: 'ask', text }
+//   你发的邀请 { t: 'game', kind: 'draw'（请他画）| 'soup-host'（请他出题）}
 import { stickerByName } from './data.js';
 
 export const stripThink = (s) => String(s || '').replace(/<think>[\s\S]*?(<\/think>|$)/gi, '').replace(/^\s*<\/think>/i, '');
@@ -80,6 +86,16 @@ export function parseLine(line) {
     if (/^(邮件|发邮件|写信|信)$/.test(tag)) return { act: 'mail', subject: arg.slice(0, 60), body: rest };
     if (/^(撤回|撤回消息|撤回上一条)$/.test(tag)) return { act: 'recall', q: (arg || rest).replace(/^[「“"']+|[」”"']+$/g, '').slice(0, 30) };
     if (/^(搜索|搜|查|查一下|联网搜索)$/.test(tag)) { const q = (arg + ' ' + rest).trim(); return q ? { act: 'search', q: q.slice(0, 80) } : null; }
+    // 一起玩
+    if (/^(画|画画|作画)$/.test(tag)) {
+      let lines = [];
+      const a = rest.indexOf('{'), b = rest.lastIndexOf('}'), a2 = rest.indexOf('[');
+      try { lines = normLines(a >= 0 && b > a ? JSON.parse(rest.slice(a, b + 1)) : a2 >= 0 ? JSON.parse(rest.slice(a2)) : []); } catch { lines = []; }
+      return { t: 'draw', by: 'them', ans: arg.replace(/^答案\s*[:：]?\s*/, '').slice(0, 20), lines };
+    }
+    if (/^(海龟汤|出题)$/.test(tag) && rest) return { t: 'soup', by: 'them', face: rest, bottom: arg.replace(/^汤底\s*[:：]?\s*/, ''), revealed: false };
+    if (/^(揭晓|揭晓答案|公布答案|公布汤底)$/.test(tag)) return { act: 'reveal' };
+    if (/^(问|提问|问出题人)$/.test(tag) && (rest || arg)) return { t: 'ask', text: rest || arg };
   }
   if (MAIL_END.test(s)) return null;
   return { t: 'text', text: s };
@@ -125,8 +141,39 @@ export function findRecall(parts, q = '') {
 const yuan = (n) => (Math.round(n * 100) / 100).toFixed(2);
 const PAY_STATE = { wait: '还没收', open: '还没收', taken: '已收下', back: '已退还' };
 
-/** 部件 → 写给模型看的一行 */
-export function partText(p) {
+// ── 画：坐标都是 0～100（左上角 0,0），一笔是一串点 [x1, y1, x2, y2, …] ──
+/** 模型写的线条（各种写法都认）→ [[x,y,x,y…]…] */
+export function normLines(raw) {
+  const ls = raw?.lines || raw?.strokes || raw;
+  if (!Array.isArray(ls)) return [];
+  const out = [];
+  for (const s of ls.slice(0, 40)) {
+    let pts = Array.isArray(s) ? s : s?.points || [];
+    if (Array.isArray(pts[0])) pts = pts.flat();
+    pts = pts.map(Number).filter(Number.isFinite).map((v) => Math.max(0, Math.min(100, Math.round(v * 10) / 10)));
+    if (pts.length % 2) pts.pop();
+    if (pts.length >= 4) out.push(pts.slice(0, 400));
+  }
+  return out;
+}
+/** 画 → 字符网格（# 是笔画）：没有看图能力的模型靠这个看 */
+export function drawGrid(lines, N = 28) {
+  const g = Array.from({ length: N }, () => Array(N).fill('.'));
+  const put = (x, y) => { const c = Math.min(N - 1, Math.floor((x / 100) * N)), r = Math.min(N - 1, Math.floor((y / 100) * N)); g[r][c] = '#'; };
+  for (const s of lines || []) {
+    for (let i = 0; i + 3 < s.length; i += 2) {
+      const [x0, y0, x1, y1] = [s[i], s[i + 1], s[i + 2], s[i + 3]];
+      const n = Math.max(1, Math.ceil((Math.hypot(x1 - x0, y1 - y0) / 100) * N * 2));
+      for (let k = 0; k <= n; k++) put(x0 + ((x1 - x0) * k) / n, y0 + ((y1 - y0) * k) / n);
+    }
+    if (s.length === 2) put(s[0], s[1]);
+  }
+  return g.map((r) => r.join('')).join('\n');
+}
+const GAME_TEXT = { draw: '[一起玩 你画我猜] 你来画，我来猜', 'soup-host': '[一起玩 海龟汤] 你出题，我来猜' };
+
+/** 部件 → 写给模型看的一行。full === true：你画的画带上字符网格（只有最近那幅带，旧的省掉；别处 .map(partText) 传进来的下标不算） */
+export function partText(p, full = false) {
   const q = p.quote ? `[引用 ${p.quote.text}] ` : '';
   switch (p.t) {
     case 'text': return q + p.text;
@@ -141,6 +188,11 @@ export function partText(p) {
     case 'book': return `[书] 《${p.title}》`;
     // 他自己撤回的：他记得发过什么、也记得撤回了（写成他自己会写的样子）；你撤回的：他没看到内容
     case 'recall': return p.by === 'them' ? `${p.was ? partText(p.was) + '\n' : ''}[撤回]` : '（撤回了一条消息）';
+    // 一起玩
+    case 'draw': return p.by === 'them' ? `[画 ${p.ans || ''}]（你画的）` : full === true ? `[画]\n${drawGrid(p.lines)}` : '[画]（一幅画，之前猜过了）';
+    case 'game': return GAME_TEXT[p.kind] || '[一起玩]';
+    case 'soup': return p.by === 'host' ? `[海龟汤] ${p.face}（出题人出的题${p.revealed ? `，已经揭晓，汤底：${p.bottom}` : ''}）` : `[海龟汤 汤底：${p.bottom}] ${p.face}${p.revealed ? '\n[揭晓]' : ''}`;
+    case 'ask': return `[问] ${p.text}`;
     default: return '';
   }
 }
@@ -161,12 +213,16 @@ export function partPreview(p) {
     case 'fwd': return '[聊天记录] ' + p.title;
     case 'book': return `[书] 《${p.title}》`;
     case 'recall': return '撤回了一条消息';
+    case 'draw': return '[画]';
+    case 'game': return '[一起玩]';
+    case 'soup': return '[海龟汤] ' + p.face;
+    case 'ask': return p.text;
     default: return '';
   }
 }
 /** 搜索用：一个部件里所有的字 */
 export function partSearchText(p) {
-  return [p.text, p.desc, p.name, p.note, p.title, ...(p.items || []).map((x) => x.name + '：' + x.text)].filter(Boolean).join(' ');
+  return [p.text, p.desc, p.name, p.note, p.title, p.face, ...(p.items || []).map((x) => x.name + '：' + x.text)].filter(Boolean).join(' ');
 }
 /** 引用里显示的那句（照片带上画面） */
 export function quoteText(p, max = QUOTE_MAX) {

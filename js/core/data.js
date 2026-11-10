@@ -70,6 +70,7 @@ export function removeAccount(id) {
   S.set('mails', mails().filter((m) => m.acc !== id));
   for (const st of stories().filter((s) => s.acc === id)) removeStory(st.id, true);
   for (const b of books().filter((x) => x.acc === id)) removeBook(b.id, true);
+  S.set('tarot', tarots().filter((t) => t.acc !== id));
   S.set('accounts', accounts().filter((a) => a.id !== id));
   if (S.get('curAcc') === id) S.set('curAcc', accounts()[0]?.id || null);
   emit('account');
@@ -335,6 +336,20 @@ export function setBookJobs(arr) { S.set('bookJobs', arr); }
 // 阅读页的样子（所有书共用）：背景图在 file.readBg；size 背景放大多少（%）、blur 模糊、veil 盖在图上的那层多淡（0～1）、font 字号
 export const readConf = () => ({ size: 100, blur: 0, veil: 0.72, font: 19, ...S.get('readConf', {}) });
 export function setReadConf(patch) { S.set('readConf', { ...readConf(), ...patch }); emit('readConf'); }
+
+// ── 塔罗（塔罗 App，你自己抽的，按身份分开）──
+// { id, acc, q（问的问题）, spread, seed, tf（时段）, cards: [{ pos, card, up（正位）}], text（解牌）, error, ts }
+export const tarots = () => S.get('tarot', []);
+export const tarotsOf = (acc = curAccount().id) => tarots().filter((t) => t.acc === acc).sort((a, b) => b.ts - a.ts);
+export function saveTarot(t) {
+  const list = tarots();
+  const i = list.findIndex((x) => x.id === t.id);
+  if (i < 0) list.push(t); else list[i] = t;
+  S.set('tarot', list);
+  emit('tarot', t.id);
+  return t;
+}
+export function removeTarot(id) { S.set('tarot', tarots().filter((t) => t.id !== id)); emit('tarot', id); }
 
 // ── 主屏幕布局 ──
 export const layout = () => S.get('layout', null);

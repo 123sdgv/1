@@ -77,6 +77,16 @@ export const ICONS = {
     <g filter="url(#sh-read)"><path d="M70 16h26a8 8 0 0 1 8 8v13a8 8 0 0 1-8 8H86l-10 9v-9h-6a8 8 0 0 1-8-8V24a8 8 0 0 1 8-8z" fill="${INK}"/></g>
     <g stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M72 27h20M72 35h12"/></g>`),
 
+  // 塔罗：两张牌，后面那张是白的牌面（一弯月），前面那张是黑色牌背（一颗星）
+  tarot: () => svg('tarot', `
+    <g transform="rotate(-12 60 62)"><rect x="25" y="22" width="44" height="72" rx="5" fill="#fff" stroke="${INK}" stroke-width="4"/>
+      <rect x="31" y="28" width="32" height="60" rx="2" fill="none" stroke="#c9cacf" stroke-width="1.6"/>
+      <path d="M52 46a11 11 0 1 0 0 22 9 9 0 1 1 0-22z" fill="${INK}"/></g>
+    <g transform="rotate(10 60 62)" filter="url(#sh-tarot)"><rect x="52" y="26" width="44" height="72" rx="5" fill="${INK}"/>
+      <rect x="57" y="31" width="34" height="62" rx="2.5" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.4"/>
+      <path d="M74 45l3 9.2h9.6l-7.8 5.6 3 9.2-7.8-5.7-7.8 5.7 3-9.2-7.8-5.6h9.6z" fill="#fff"/>
+      <path d="M74 37v3M74 80v3" stroke="#fff" stroke-opacity=".6" stroke-width="1.6" stroke-linecap="round"/></g>`),
+
   album: () => svg('album', `
     <defs><linearGradient id="ph-album" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5d5e63"/><stop offset="1" stop-color="#232326"/></linearGradient></defs>
     <g transform="rotate(-9 60 64)"><rect x="30" y="26" width="56" height="66" rx="3" fill="#fff" stroke="#bfc0c5" stroke-width="2"/><rect x="36" y="32" width="44" height="42" fill="#d6d7db"/></g>
