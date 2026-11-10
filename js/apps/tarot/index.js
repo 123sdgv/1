@@ -121,7 +121,7 @@ export function mount(body, { close }) {
       }, 1100);
     }
 
-    // 解牌那一块：解好的字 / 正在解 / 没解成 / 还没解（翻完了自己开始，旧的点「解牌」）
+    // 解牌那一块：解好的字 / 正在解 / 写了一半断了（点了接着解）/ 没解成 / 还没解（翻完了自己开始，旧的点「解牌」）
     function drawOut() {
       const rec = D.tarots().find((t) => t.id === id);
       if (!rec) return;
@@ -133,22 +133,30 @@ export function mount(body, { close }) {
         return;
       }
       if (flipped.size < rec.cards.length) return;
+      if (rec.part) {
+        out.append(...textEls(rec.part), h('button', { class: 'ch-err ta-err', text: `${rec.error ? '没解完：' + rec.error : '没解完'}　点这里接着解`, onclick: () => startRead(true) }));
+        return;
+      }
       if (rec.error) { out.append(h('button', { class: 'ch-err ta-err', text: `没解成：${rec.error}　点这里重试`, onclick: () => startRead() })); return; }
       out.append(h('button', { class: 'btn wide ta-go', text: '解牌', onclick: () => startRead() }));
     }
-    async function startRead() {
+    async function startRead(goOn = false) {
       const rec = D.tarots().find((t) => t.id === id);
       if (!rec || rec.text || reading.has(id)) { drawOut(); return; }
-      reading.set(id, '');
+      const part = goOn ? rec.part || '' : '';
+      reading.set(id, part);
       drawOut();
-      requestAnimationFrame(() => out.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      if (!goOn) requestAnimationFrame(() => out.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      // 边解边存（写了一半的放在 part 里）：中途手机锁屏、网页被关掉，回来还能接着解
+      let savedAt = Date.now();
+      const keep = (t) => { if (Date.now() - savedAt < 2000) return; savedAt = Date.now(); const r = D.tarots().find((x) => x.id === id); if (r) D.saveTarot({ ...r, part: t, error: '' }); };
       try {
-        const text = await TA.read(rec, { onText: (t) => { reading.set(id, t); D.emit('tarotText', id); } });
+        const text = await TA.read(rec, { part, onText: (t) => { reading.set(id, t); D.emit('tarotText', id); keep(t); } });
         if (!text) throw new Error('这次是空的');
-        D.saveTarot({ ...D.tarots().find((t) => t.id === id), text, error: '' });
+        D.saveTarot({ ...D.tarots().find((t) => t.id === id), text, part: '', error: '' });
       } catch (e) {
         const r = D.tarots().find((t) => t.id === id);
-        if (r) D.saveTarot({ ...r, error: e.message || '出错了' });
+        if (r) D.saveTarot({ ...r, part: e.part || r.part || '', error: e.message || '出错了' });
       } finally {
         reading.delete(id);
         D.emit('tarotText', id);

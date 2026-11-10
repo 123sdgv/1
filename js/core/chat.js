@@ -6,7 +6,6 @@ import { parseChat, stripThink, partPreview, partText, quoteText, makeRecall, fi
 import { schedulePostReacts } from './life.js';
 import { charMail } from './mail.js';
 import { webSearch, searchReady } from './search.js';
-import * as G from './game.js';
 
 const running = new Map(); // key -> AbortController
 export const busy = (key) => running.has(key);
@@ -105,8 +104,6 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
     if (gone()) return null;
     rec.alts[rec.cur] = before;
     finish(c, rec, acts0);
-    // 一起猜海龟汤：他用 [问] 问出题人的，出题人一个个回答
-    if (G.soupOf(cid)?.kind === 'soup-coop') for (const p of before) if (p.t === 'ask') judgeLater(cid, c.name || D.nameOf(c), p.text);
     return rec;
   } catch (e) {
     if (e.name !== 'AbortError') rec.error = e.message || '出错了';
@@ -165,7 +162,6 @@ export function autoReply(cid, wait = 1800) {
   clearTimeout(autoT.get(cid));
   autoT.set(cid, setTimeout(() => {
     autoT.delete(cid);
-    if (judging.has(cid)) { autoReply(cid, 500); return; } // 出题人还在判你刚问的：等他答完再回
     if (!running.has(cid) && lastIsMe(cid)) reply(cid);
   }, wait));
 }
@@ -205,8 +201,6 @@ function finish(c, rec, acts) {
       const olds = list.filter((r) => r.role === 'them' && r !== rec).slice(-6).reverse();
       for (const r of olds) { const ps = D.partsOf(r), k = findRecall(ps, a.q); if (k >= 0) { ps[k] = makeRecall(ps[k], 'them'); break; } }
     }
-    // 他出的海龟汤：[揭晓] = 汤底露出来
-    if (a.act === 'reveal') { const g = G.soupOf(c.id); if (g && g.soup.by === 'them') G.reveal(c.id, g.soup); }
     if (a.act === 'takePay') { const p = waitPay(); if (p) { p.state = 'taken'; note(c.id, `${D.nameOf(c)}已收下你的转账`); } }
     if (a.act === 'backPay') { const p = waitPay(); if (p) { p.state = 'back'; note(c.id, `${D.nameOf(c)}退还了你的转账`); } }
     if (a.act === 'post') {
@@ -279,43 +273,10 @@ export function clearChat(cid) {
   D.setMeta(cid, { unread: 0 });
 }
 
-// ── 一起猜海龟汤：你说的每句、他 [问] 的每句，先给出题人判一下（是 / 不是 / 无关；猜中了、不猜了就揭晓），出题人的回答是一行小字 ──
-const judging = new Map(); // 角色 id → 正在判的（一句一句排着）
-function judgeLater(cid, who, text) {
-  const prev = judging.get(cid) || Promise.resolve();
-  const pr = prev.then(() => judgeOne(cid, who, text));
-  judging.set(cid, pr);
-  pr.finally(() => { if (judging.get(cid) === pr) judging.delete(cid); D.emit('typing', cid); });
-  D.emit('typing', cid);
-}
-export const isJudging = (cid) => judging.has(cid);
-async function judgeOne(cid, who, text) {
-  const g = G.soupOf(cid);
-  if (g?.kind !== 'soup-coop') return;
-  // 出题人看得到的：开题以后大家问过的和它答过的
-  const list = D.msgs(cid), from = list.indexOf(g.rec);
-  const c = D.charById(cid), me = D.accounts().find((a) => a.id === c?.acc)?.name || '我';
-  const hist = list.slice(from + 1).flatMap((r) => D.partsOf(r).map((p) => {
-    if (r.role === 'note') return /^出题人/.test(p.text || '') ? p.text : '';
-    if (p.t === 'ask') return `${c?.name || '他'}：${p.text}`;
-    return r.role === 'me' && (p.t === 'text' || p.t === 'voice') ? `${me}：${p.text}` : '';
-  })).filter(Boolean).slice(-40).join('\n');
-  try {
-    const r = await G.judge(g.soup, hist, who, text);
-    if (r.kind === 'chat') return;
-    if (r.kind === 'giveup') { G.reveal(cid, g.soup, '出题人公布了汤底'); return; }
-    if (r.kind === 'guess' && r.solved) { G.reveal(cid, g.soup, `出题人：${who}猜中了`); return; }
-    note(cid, `出题人回${who}：${r.answer || (r.kind === 'guess' ? '不对' : '无关')}`);
-  } catch (e) { note(cid, `出题人没回上（${e.message}）`); }
-}
-
 /** 你发一条（可以是几个部件）。发完他会自动回 */
 export function send(cid, parts) {
   const rec = D.addMsg(cid, { role: 'me', alts: [parts] });
   const c = D.charById(cid);
-  // 一起猜海龟汤的时候：你说的先给出题人判
-  const said = parts.filter((p) => p.t === 'text' || p.t === 'voice').map((p) => p.text).join('\n');
-  if (said && G.soupOf(cid)?.kind === 'soup-coop') judgeLater(cid, D.accounts().find((a) => a.id === c?.acc)?.name || '我', said);
   for (const p of parts) if (p.t === 'photo') D.addPhoto({ acc: c?.acc, desc: p.desc, who: 'me' });
   // 你在聊天里把自己的邮箱发给他了：他就记住了
   const addr = c && D.myAddr(D.accounts().find((a) => a.id === c.acc));

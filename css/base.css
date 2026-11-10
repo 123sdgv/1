@@ -17,6 +17,8 @@
   --bot: calc(var(--safe-b) + var(--home-bar));
   --ez: cubic-bezier(.2, .85, .25, 1);
 }
+/* iOS 26.1 以后主屏幕模式：底下那条系统画的空白已经让过 Home 横条了，网页里不再让（main.js 量出来才加这个） */
+:root.ios-strip { --safe-b: 0px; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
 body { background: #0c0c0d; color: var(--ink); font: 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-text-size-adjust: 100%; }
@@ -255,7 +257,7 @@ body.kb .scroll { padding-bottom: 16px; }
 body.kb .so-tabs { display: none; }
 /* 手机上开着 App 的时候底色用浅色：键盘上面那条（iOS 的 ˄ ˅ ✓）后面、iOS 26 主屏幕模式最底下空出来的那条，
    露出来的都是这个底色，黑色的话就像一块黑条压上来。主屏幕和锁屏还是黑的 */
-@media (max-width: 619px) { body.in-app:not(.locked), body.kb { background: var(--bg); } }
+@media (max-width: 619px) { body.in-app:not(.locked), body.kb { background: var(--bg); } body.in-app:not(.locked) #device { background: var(--bg); } }
 .slide:focus { outline: none; }
 
 /* 原地改：几个地方的小调整 */

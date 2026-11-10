@@ -87,6 +87,14 @@ export const ICONS = {
       <path d="M74 45l3 9.2h9.6l-7.8 5.6 3 9.2-7.8-5.7-7.8 5.7 3-9.2-7.8-5.6h9.6z" fill="#fff"/>
       <path d="M74 37v3M74 80v3" stroke="#fff" stroke-opacity=".6" stroke-width="1.6" stroke-linecap="round"/></g>`),
 
+  // 游戏：一个黑色手柄（原创的圆胖形状），白色十字键和两颗按钮
+  game: () => svg('game', `
+    <g filter="url(#sh-game)"><path d="M39 38h42c11.5 0 18.6 7.6 20.8 19l3.8 19.6c1.6 8.4-3.6 15.4-10.6 15.4-5.2 0-8.4-3-11.4-7l-3.6-4.8H40l-3.6 4.8c-3 4-6.2 7-11.4 7-7 0-12.2-7-10.6-15.4L18.2 57C20.4 45.6 27.5 38 39 38z" fill="${INK}"/></g>
+    <path d="M39 40.4h42c6 0 10.6 2.4 13.8 6.4" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width="2" stroke-linecap="round"/>
+    <path d="M40 54v18M31 63h18" stroke="#fff" stroke-width="5.4" stroke-linecap="round"/>
+    <circle cx="80" cy="57.5" r="4.6" fill="#fff"/><circle cx="90" cy="67.5" r="4.6" fill="#fff"/>
+    <rect x="54" y="47" width="12" height="3.6" rx="1.8" fill="#fff" fill-opacity=".45"/>`),
+
   album: () => svg('album', `
     <defs><linearGradient id="ph-album" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5d5e63"/><stop offset="1" stop-color="#232326"/></linearGradient></defs>
     <g transform="rotate(-9 60 64)"><rect x="30" y="26" width="56" height="66" rx="3" fill="#fff" stroke="#bfc0c5" stroke-width="2"/><rect x="36" y="32" width="44" height="42" fill="#d6d7db"/></g>

@@ -66,12 +66,39 @@ export function stats(cards) {
   return { n, maj, ratio: n ? Math.round((maj / n) * 100) : 0, suits, missing };
 }
 
-/** 解牌：流式，onText(到现在的全文) */
-export async function read(rec, { onText, signal } = {}) {
+/**
+ * 解牌：流式，onText(到现在的全文)。
+ * 解得长（凯尔特十字十张牌），以前 token 上限给少了会写一半断掉，现在给到 7000；
+ * 45 秒什么都没收到就当卡住了，停下（写了一半的留着，能接着解）；整段一起回的那种接口等 4 分钟。
+ * part = 上次写了一半的：接着写，返回的是接上之后的全文
+ */
+const STALL = 45000, WHOLE = 240000;
+export async function read(rec, { onText, signal, part = '' } = {}) {
   const g = D.genOf({});
-  const msgs = [{ role: 'user', content: T.tarotPrompt({ q: rec.q, spread: SPREADS[rec.spread].name, time: TIME_NAME[rec.tf], cards: rec.cards.map((c) => ({ ...c, el: elementOf(c.card), major: isMajor(c.card) })), stats: stats(rec.cards) }) }];
-  const text = await chat(msgs, { signal, temperature: Math.min(1, g.temperature), max_tokens: Math.max(2600, g.maxTokens), onDelta: (_, all) => onText && onText(stripThink(all)) });
-  return stripThink(text).trim();
+  const prompt = T.tarotPrompt({ q: rec.q, spread: SPREADS[rec.spread].name, time: TIME_NAME[rec.tf], cards: rec.cards.map((c) => ({ ...c, el: elementOf(c.card), major: isMajor(c.card) })), stats: stats(rec.cards) });
+  const msgs = [{ role: 'user', content: prompt }];
+  if (part) msgs.push({ role: 'assistant', content: part }, { role: 'user', content: T.tarotGoOn() });
+  const ctrl = new AbortController();
+  signal?.addEventListener('abort', () => ctrl.abort());
+  let stalled = false, t = 0;
+  const alive = (whole) => { clearTimeout(t); t = setTimeout(() => { stalled = true; ctrl.abort(); }, whole === true ? WHOLE : STALL); };
+  const join2 = (more) => (part ? part.replace(/\s+$/, '') + '\n' + more.replace(/^\s+/, '') : more);
+  let got = '', why = '';
+  alive();
+  try {
+    await chat(msgs, {
+      signal: ctrl.signal, temperature: Math.min(1, g.temperature), max_tokens: Math.max(7000, g.maxTokens),
+      onAlive: alive, onEnd: (r) => { why = r; },
+      onDelta: (_, all) => { got = stripThink(all); onText && onText(join2(got)); },
+    });
+  } catch (e) {
+    if (stalled) { const err = new Error('半天没动静，停下了'); err.part = join2(got).trim(); throw err; }
+    e.part = join2(got).trim();
+    throw e;
+  } finally { clearTimeout(t); }
+  // 写到 token 上限被截断了：当成写了一半，能接着解
+  if (why === 'length') { const err = new Error('写得太长被截断了'); err.part = join2(got).trim(); throw err; }
+  return join2(got).trim();
 }
 
 // ── 牌面：黑白，边框 + 编号 + 中间一个图案 + 牌名。大牌每张一个小图案，小牌是花色符号（数字牌按数量排，宫廷牌写字） ──

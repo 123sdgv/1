@@ -1,8 +1,7 @@
 // 把数据拼成发给模型的 messages。提示词的文字都在 prompt.js，这里只管「拿哪些数据、拿多少」。
 import * as D from './data.js';
 import * as T from './prompt.js';
-import { partText, fwdText } from './parse.js';
-import { gameOf } from './game.js';
+import { partText, fwdText, drawGrid } from './parse.js';
 import { full, span, sep, ymd, hm, md, rangeText, monthText } from './time.js';
 import { weatherLine } from './weather.js';
 
@@ -112,12 +111,10 @@ function windowOf(list, limit) {
 function historyMsgs(list, acc, limit) {
   const out = [];
   let prev = 0;
-  // 你画的画：只有最近那幅给他看字符网格，前面的省掉
-  const lastDraw = [...list].reverse().find((r) => r.role === 'me' && D.partsOf(r).some((p) => p.t === 'draw'))?.id;
   for (const r of windowOf(list, limit)) {
     const parts = D.partsOf(r);
     if (!parts.length) continue;
-    let text = parts.map((p) => partText(p, r.id === lastDraw)).filter(Boolean).join('\n');
+    let text = parts.map((p) => partText(p)).filter(Boolean).join('\n');
     if (r.ts - prev > 3600000) text = T.stamp(sep(r.ts)) + '\n' + text;
     prev = r.ts;
     if (r.role === 'them') out.push({ role: 'assistant', content: text });
@@ -190,7 +187,7 @@ export function buildChat(c, { extra = null, uptoId = null, skipId = null, canSe
     T.recalledText(recalledOf(c, lastUserText(list))),
     T.activity(activityOf(c)),
     T.reading(readingOf(c)),
-    T.gameHint({ g: gameOf(list), me }),
+    T.gamesPlayed(gamesFor(c)),
     search ? T.searchResult({ me, ...search }) : '',
   ] }));
 }
@@ -239,6 +236,8 @@ export function diaryLog(c, since) {
     for (const r of D.storyMsgs(st.id)) if (r.ts > since) rows.push([r.ts, `${hm(r.ts)} 【见面·${st.title || '线下'}】${r.role === 'them' ? '' : me + '：'}${cut(D.partsOf(r).map(partText).join(' '), 600)}`]);
   }
   for (const m of D.mailsWith(c.id)) if (m.ts > since) rows.push([m.ts, `${hm(m.ts)} 【邮件】${mailLine(m, c, acc, 500)}`]);
+  // 一起玩的游戏：一局一行（玩了什么、结果）
+  for (const g of D.gamesWith(c.id)) if ((g.lastTs || g.ts) > since && g.log.length) rows.push([g.lastTs || g.ts, `${hm(g.lastTs || g.ts)} 【游戏·${T.GAME_NAME[g.game]}】${gameLine(g, me)}`]);
   // 一起读书时你们写的段评
   for (const b of D.booksReadBy(c.id)) {
     const chs = D.chapters(b.id), all = D.bookCmts(b.id);
@@ -436,4 +435,41 @@ function readingOf(c) {
     const where = rd.review ? `你们一起读完了，你写过阅读日记` : read.length ? `你读完了 ${read.length} 章（现在一共 ${chs.length} 章${b.done ? '，已完结' : '，还在更新'}），${me}翻到了第 ${Math.max(1, b.reach || 0)} 章` : `${me}刚邀请你一起读，你还没开始读（现在一共 ${chs.length} 章）`;
     return [`《${b.title}》：${where}。`, last && !rd.review ? `你最近的读书笔记：${cut(rd.notes[last.id], 200)}` : '', mine ? `${me}最近写的段评：${mine}` : ''].filter(Boolean).join(' ');
   });
+}
+
+// ── 游戏 App ──
+/** 一局，从他的角度说一句：玩了什么、结果 */
+export function gameLine(g, me) {
+  const r = (mine, his, none) => (g.win === 'me' ? mine : g.win === 'them' ? his : g.over ? none : '还没玩完');
+  const n = g.log.filter((e) => e.who === 'me' && e.text).length;
+  if (g.game === 'draw') {
+    return g.mode === 'me' ? `${me}画了「${g.ans || '？'}」让你猜，` + r('', `你猜中了`, `你没猜中，${me}公布了答案`)
+      : `你画了「${g.ans || '？'}」让${me}猜，` + r(`${me}猜中了`, '', `${me}没猜中`);
+  }
+  const face = g.soup ? `（汤面：${cut(g.soup.face, 40)}）` : '';
+  return g.mode === 'coop' ? `你们一起猜了一道海龟汤${face}，` + r(`${me}先猜中了`, '你先猜中了', '没猜出来，出题人公布了汤底')
+    : `你出了一道海龟汤让${me}猜${face}，${me}问了 ${n} 句，` + r(`${me}猜中了`, '', `${me}没猜出来`);
+}
+/** 聊天时他知道的：最近 3 天一起玩过的，最多 3 局 */
+function gamesFor(c) {
+  const acc = accOf(c), me = meName(acc), since = Date.now() - 3 * 86400000;
+  return D.gamesWith(c.id).filter((g) => (g.lastTs || g.ts) > since && g.log.length).slice(-3)
+    .map((g) => `${sep(g.lastTs || g.ts)} 一起玩${T.GAME_NAME[g.game]}：${gameLine(g, me)}`);
+}
+/** 游戏里他说话：规矩 + 这一局到现在的来往 */
+export function buildGame(c, g) {
+  const acc = accOf(c), me = meName(acc);
+  const sys = T.gameSystem({ c, me, identityText: identityOf(c), memoryText: memoryOf(c, '', { mails: false, withRecall: false, timeline: false }), g: { ...g, overText: g.over ? gameLine(g, me) + '。' : '' } });
+  const lastDraw = [...g.log].reverse().find((e) => e.who === 'me' && e.t === 'draw')?.id;
+  const msgs = [{ role: 'system', content: sys }];
+  const add = (role, content) => { const last = msgs[msgs.length - 1]; if (last.role === role && role !== 'system') last.content += '\n' + content; else msgs.push({ role, content }); };
+  for (const e of g.log) {
+    if (e.err) continue;
+    if (e.who === 'me') add('user', e.t === 'draw' ? (e.id === lastDraw ? `[画]\n${drawGrid(e.lines)}` : '[画]（之前那幅）') : e.text);
+    else if (e.who === 'them') add('assistant', e.t === 'draw' ? `[画 ${g.ans || ''}]（你画的）` : e.t === 'soup' && g.soup ? `[海龟汤 汤底：${g.soup.bottom}] ${g.soup.face}` : e.t === 'ask' ? `[问] ${e.text}` : e.text);
+    else add('user', `（${e.text}）`);
+  }
+  if (msgs.length === 1) add('user', '（开始吧）');
+  if (msgs[msgs.length - 1].role !== 'user') add('user', '（继续）');
+  return msgs;
 }

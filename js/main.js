@@ -58,6 +58,10 @@ function fitViewport() {
     if (p !== portrait) { portrait = p; tall = 0; }
     const typing = !!document.activeElement?.matches?.('input, textarea, [contenteditable]:not([contenteditable="false"])');
     if (!typing) tall = Math.max(tall, vv.height, innerHeight);
+    // iOS 26.1 以后的主屏幕模式：最底下那条系统画的空白（约 59pt）已经把 Home 横条的位置让出去了，
+    // 可 safe-area-inset-bottom 还报 34，网页再让一遍就空出一大块、横条和底栏都飘在半空。量出来屏幕比网页高一截，就不再让
+    const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+    document.documentElement.classList.toggle('ios-strip', standalone && p && /iP(hone|od)/.test(navigator.userAgent) && screen.height - tall > 40);
     document.body.classList.toggle('kb', typing && tall - vv.height > 120);
     dev.style.height = vv.height + 'px';
     dev.style.top = vv.offsetTop + 'px';

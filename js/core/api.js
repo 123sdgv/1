@@ -29,7 +29,11 @@ function errText(status, body) {
 /**
  * 发一次对话。onDelta(片段, 到目前为止的全文) 每来一点字调一次。返回完整文字。
  */
-export async function chat(messages, { onDelta, signal, temperature, max_tokens, stream = true } = {}) {
+/**
+ * onEnd(原因) 写完时告诉一声为什么停（'length' = 到 token 上限被截断了）。
+ * onAlive() 每收到一点东西都调（连思考过程那种不显示的也算）：用来看是不是卡住了；onAlive(true) = 这家不是一点一点回的，整段写完才来
+ */
+export async function chat(messages, { onDelta, onAlive, onEnd, signal, temperature, max_tokens, stream = true } = {}) {
   const cfg = api(), st = settings();
   const url = endpoint(cfg.base);
   if (!url || !cfg.model) throw new ApiError('还没填 API：去 设置 → API 填地址和模型', 'config');
@@ -50,9 +54,10 @@ export async function chat(messages, { onDelta, signal, temperature, max_tokens,
   if (!res.ok) throw new ApiError(errText(res.status, await res.text().catch(() => '')), 'http');
   const ct = res.headers.get('content-type') || '';
   if (!stream || !ct.includes('event-stream') || !res.body) {
+    onAlive && onAlive(true); // 不是一点一点来的：整段写完才回，要等得久
     const raw = await res.text();
     let text = '';
-    try { const j = JSON.parse(raw); text = j.choices?.[0]?.message?.content ?? j.choices?.[0]?.text ?? ''; }
+    try { const j = JSON.parse(raw); text = j.choices?.[0]?.message?.content ?? j.choices?.[0]?.text ?? ''; onEnd && onEnd(j.choices?.[0]?.finish_reason || ''); }
     catch { text = sseJoin(raw); }
     onDelta && onDelta(text, text);
     return text;
@@ -63,6 +68,7 @@ export async function chat(messages, { onDelta, signal, temperature, max_tokens,
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    onAlive && onAlive();
     buf += dec.decode(value, { stream: true });
     let i;
     while ((i = buf.indexOf('\n')) >= 0) {
@@ -76,6 +82,7 @@ export async function chat(messages, { onDelta, signal, temperature, max_tokens,
         if (j.error) throw new ApiError(j.error.message || '出错了', 'http');
         const d = j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.text ?? '';
         if (d) { all += d; onDelta && onDelta(d, all); }
+        if (j.choices?.[0]?.finish_reason) onEnd && onEnd(j.choices[0].finish_reason);
       } catch (e) { if (e instanceof ApiError) throw e; }
     }
   }

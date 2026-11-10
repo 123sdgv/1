@@ -3,7 +3,7 @@
 // 撤回了的那条只剩一行小字「X 撤回了一条消息」（他也能撤回自己的：[撤回]）；长按那行小字可以删掉。
 // 多选：每条前面一个圆圈，一次删掉或者合并转发（到动态、或者别的角色）。
 // 你发完消息他会自动回（core/chat.js 的 autoReply），不用点按钮。
-// 加号里「一起玩」：你画我猜（你画 / 请他画）、海龟汤（请他出题 / 一起猜，出题人的回答是一行小字）。长按没揭晓的汤 = 翻开汤底。
+// 一起玩的小游戏在游戏 App 里（apps/game）；第六版在聊天里玩过的画、海龟汤还照样显示，长按没揭晓的汤 = 翻开汤底。
 import { h, page, avatar, icon, btnIc, menu, toast, longPress, autosize, sheet, popbar, confirm } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { sep, md } from '../../core/time.js';
@@ -192,7 +192,7 @@ export function openChat(ctx, cid, { at = null } = {}) {
       anchor = x.el;
       prevTs = r.ts;
     }
-    sub.textContent = CS.isSearching(cid) ? '对方正在搜索…' : CS.busy(cid) ? '对方正在输入…' : CS.isJudging(cid) ? '出题人在想…' : '';
+    sub.textContent = CS.isSearching(cid) ? '对方正在搜索…' : CS.busy(cid) ? '对方正在输入…' : '';
     pg.setTitle(D.nameOf(D.charById(cid)) || '');
     drawSend();
     if (sel) { const n = selected().length; delSel.disabled = fwdSel.disabled = !n; }
@@ -336,54 +336,7 @@ export function openChat(ctx, cid, { at = null } = {}) {
       tile('camera', '拍照', async () => { s.close(); const v = await textSheet('拍照'); if (v) sendParts([{ t: 'photo', desc: v }]); }),
       tile('mic', '语音', async () => { s.close(); const v = await textSheet('语音'); if (v) sendParts([makeVoice(v)]); }),
       tile('pay', '转账', () => { s.close(); transfer(); }),
-      tile('book', '一起读', () => { s.close(); pickBook(); }),
-      tile('dice', '一起玩', () => { s.close(); playMenu(); })) });
-  }
-  // ── 一起玩：你画我猜（你画 / 请他画）、海龟汤（请他出题 / 一起猜）──
-  function playMenu() {
-    menu([
-      ['你画我猜 · 我来画', () => drawSheet()],
-      ['你画我猜 · 他来画', () => sendParts([{ t: 'game', kind: 'draw' }])],
-      ['海龟汤 · 他出题', () => sendParts([{ t: 'game', kind: 'soup-host' }])],
-      ['海龟汤 · 一起猜', () => startCoop()],
-    ], '一起玩');
-  }
-  async function startCoop() {
-    toast('出题人在想题…', 2400);
-    try {
-      const part = await G.hostSoup();
-      D.addMsg(cid, { role: 'note', alts: [[part]] });
-      toBottom(true);
-      setTimeout(() => CS.reply(cid), 700); // 他看到题，先说两句、问一个
-    } catch (e) { toast(e.message || '出题人没出好题'); }
-  }
-  // 画板：手指画，撤销一笔、全擦、发出去（坐标存成 0～100）
-  function drawSheet() {
-    const lines = [];
-    let cur = null;
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const pad = document.createElementNS(svgNS, 'svg');
-    pad.setAttribute('viewBox', '0 0 100 100');
-    pad.setAttribute('class', 'dr-pad');
-    const g0 = document.createElementNS(svgNS, 'g');
-    g0.setAttribute('fill', 'none'); g0.setAttribute('stroke', 'currentColor'); g0.setAttribute('stroke-width', '2.2'); g0.setAttribute('stroke-linecap', 'round'); g0.setAttribute('stroke-linejoin', 'round');
-    pad.append(g0);
-    const redraw = () => { g0.innerHTML = lines.map((l) => `<polyline points="${l.join(' ')}"/>`).join(''); sendB.disabled = !lines.length; undoB.disabled = clearB.disabled = !lines.length; };
-    const at = (e) => { const r = pad.getBoundingClientRect(); return [Math.max(0, Math.min(100, Math.round(((e.clientX - r.left) / r.width) * 1000) / 10)), Math.max(0, Math.min(100, Math.round(((e.clientY - r.top) / r.height) * 1000) / 10))]; };
-    pad.addEventListener('pointerdown', (e) => { e.preventDefault(); pad.setPointerCapture(e.pointerId); cur = at(e); lines.push(cur); redraw(); });
-    pad.addEventListener('pointermove', (e) => {
-      if (!cur) return;
-      const [x, y] = at(e), n = cur.length;
-      if (Math.hypot(x - cur[n - 2], y - cur[n - 1]) < 1.2) return; // 太近的点不要，线条短一点
-      cur.push(x, y); redraw();
-    });
-    const up = () => { if (cur && cur.length < 4) cur.push(cur[0] + 0.3, cur[1] + 0.3); cur = null; redraw(); };
-    pad.addEventListener('pointerup', up); pad.addEventListener('pointercancel', up);
-    const undoB = h('button', { 'aria-label': '撤销一笔', html: icon('undo'), onclick: () => { lines.pop(); redraw(); } });
-    const clearB = h('button', { 'aria-label': '全擦掉', html: icon('trash'), onclick: () => { lines.length = 0; redraw(); } });
-    const sendB = h('button', { class: 'go', 'aria-label': '发给他猜', html: icon('send'), onclick: () => { s.close(); sendParts([{ t: 'draw', by: 'me', lines: lines.map((l) => [...l]) }]); } });
-    const s = sheet({ title: '你画我猜', cls: 'dr-sheet', body: h('div', { class: 'dr-wrap' }, pad, h('div', { class: 'dr-bar' }, undoB, clearB, sendB)) });
-    redraw();
+      tile('book', '一起读', () => { s.close(); pickBook(); })) });
   }
   // 从书架挑一本发给他：他就加入一起读（core/read.js）
   function pickBook() {

@@ -13,12 +13,12 @@
 //   [搜索 关键词]                         —— 他想查点东西（设了搜索才有）：搜完把结果给他，再接着回
 //   [撤回]                                —— 他撤回自己刚发的上一条（也认 [撤回 那条里的几个字]）。撤回的那条变成部件
 //                                            { t: 'recall', by: 'me'|'them', was: 原来的部件 }，聊天里只显示一行「X 撤回了一条消息」
-//   一起玩（core/game.js）：
-//   [画 答案] {"lines":[[x,y,x,y…]…]}       —— 你画我猜，他画一幅（答案不显示）→ { t: 'draw', by: 'them', ans, lines }；你画的是 by: 'me'
-//   [海龟汤 汤底：真相] 汤面                —— 他出一道海龟汤（汤底不显示）→ { t: 'soup', by: 'them', face, bottom, revealed }；一起猜时出题人出的是 by: 'host'
-//   [揭晓]                                —— 他公布汤底（动作）
+//   游戏 App 里（core/game.js 也用这个拆他的话）：
+//   [画 答案] {"lines":[[x,y,x,y…]…]}       —— 你画我猜，他画一幅（答案不显示）→ { t: 'draw', by: 'them', ans, lines }
+//   [海龟汤 汤底：真相] 汤面                —— 他出一道海龟汤 → { t: 'soup', by: 'them', face, bottom }
+//   [猜对了]                              —— 你猜中了他的（动作）；[揭晓] —— 他公布汤底（动作）
 //   [问] 是非题                            —— 一起猜海龟汤时他问出题人 → { t: 'ask', text }
-//   你发的邀请 { t: 'game', kind: 'draw'（请他画）| 'soup-host'（请他出题）}
+//   第六版在聊天里玩过的（draw / soup / game / ask 部件）聊天里还照样显示，新的不会再有
 import { stickerByName } from './data.js';
 
 export const stripThink = (s) => String(s || '').replace(/<think>[\s\S]*?(<\/think>|$)/gi, '').replace(/^\s*<\/think>/i, '');
@@ -95,6 +95,7 @@ export function parseLine(line) {
     }
     if (/^(海龟汤|出题)$/.test(tag) && rest) return { t: 'soup', by: 'them', face: rest, bottom: arg.replace(/^汤底\s*[:：]?\s*/, ''), revealed: false };
     if (/^(揭晓|揭晓答案|公布答案|公布汤底)$/.test(tag)) return { act: 'reveal' };
+    if (/^(猜对了|猜中了|答对了)$/.test(tag)) return { act: 'win' };
     if (/^(问|提问|问出题人)$/.test(tag) && (rest || arg)) return { t: 'ask', text: rest || arg };
   }
   if (MAIL_END.test(s)) return null;

@@ -92,6 +92,7 @@ const P = {
   aa: '<path d="M3.6 18.4 8.4 5.8l4.8 12.6M5.4 14h6"/><circle cx="17.6" cy="15.7" r="2.7"/><path d="M20.3 12.2v6.2"/>',
   dice: '<rect x="4.4" y="4.4" width="15.2" height="15.2" rx="3.4"/><circle cx="8.8" cy="8.8" r="1.15" fill="currentColor" stroke="none"/><circle cx="15.2" cy="8.8" r="1.15" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="8.8" cy="15.2" r="1.15" fill="currentColor" stroke="none"/><circle cx="15.2" cy="15.2" r="1.15" fill="currentColor" stroke="none"/>',
   eye: '<path d="M2.8 12s3.4-6.2 9.2-6.2 9.2 6.2 9.2 6.2-3.4 6.2-9.2 6.2S2.8 12 2.8 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  flag: '<path d="M6 21V4"/><path d="M6 4.6c4.2-2.2 7.4 2.2 12.4 0v9.2c-5 2.2-8.2-2.2-12.4 0"/>',
   brush: '<path d="M14.6 5.6 18.4 9.4 10.6 17.2a3 3 0 0 1-2.1.9H5.8v-2.7a3 3 0 0 1 .9-2.1z"/><path d="M13 7.2l3.8 3.8"/>',
 };
 export const icon = (name, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;

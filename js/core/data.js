@@ -71,6 +71,7 @@ export function removeAccount(id) {
   for (const st of stories().filter((s) => s.acc === id)) removeStory(st.id, true);
   for (const b of books().filter((x) => x.acc === id)) removeBook(b.id, true);
   S.set('tarot', tarots().filter((t) => t.acc !== id));
+  S.set('games', games().filter((g) => g.acc !== id));
   S.set('accounts', accounts().filter((a) => a.id !== id));
   if (S.get('curAcc') === id) S.set('curAcc', accounts()[0]?.id || null);
   emit('account');
@@ -124,6 +125,7 @@ export function removeChar(id, quiet) {
     if (cm.some((x) => x.who === id)) S.set('bookcm.' + b.id, cm.filter((x) => x.who !== id));
   }
   S.set('bookJobs', bookJobs().filter((j) => j.who !== id));
+  S.set('games', games().filter((g) => g.char !== id));
   if (!quiet) emit('chars');
 }
 
@@ -350,6 +352,24 @@ export function saveTarot(t) {
   return t;
 }
 export function removeTarot(id) { S.set('tarot', tarots().filter((t) => t.id !== id)); emit('tarot', id); }
+
+// ── 游戏（游戏 App：你画我猜、海龟汤，一局一条，按身份分开；陪你玩的那个角色聊天、写日记时知道）──
+// { id, acc, char, game: 'draw'|'soup', mode: 'me'（你画他猜）|'him'（他画你猜 / 他出题）|'coop'（一起猜海龟汤）,
+//   ts, lastTs, over, win: 'me'|'them'|null, ans（画的是什么）, lines（那幅画）, soup: { title, face, bottom, keys },
+//   log: [{ id, who: 'me'|'them'|'host'|'sys', t: 'text'|'draw'|'ask', text, lines, err }] }
+export const games = () => S.get('games', []);
+export const gamesOf = (acc = curAccount().id) => games().filter((g) => g.acc === acc).sort((a, b) => (b.lastTs || b.ts) - (a.lastTs || a.ts));
+export const gamesWith = (cid) => games().filter((g) => g.char === cid).sort((a, b) => (a.lastTs || a.ts) - (b.lastTs || b.ts));
+export const gameById = (id) => games().find((g) => g.id === id) || null;
+export function saveGame(g) {
+  const list = games();
+  const i = list.findIndex((x) => x.id === g.id);
+  if (i < 0) list.push(g); else list[i] = g;
+  S.set('games', list);
+  emit('game', g.id);
+  return g;
+}
+export function removeGame(id) { S.set('games', games().filter((g) => g.id !== id)); emit('game', id); }
 
 // ── 主屏幕布局 ──
 export const layout = () => S.get('layout', null);
