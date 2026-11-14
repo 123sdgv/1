@@ -1,8 +1,10 @@
-// 一起读书。
+// 读书（第七版起没有「一起读」了，改成一章一章分享）。
 // - 书一章一章上传（一段文字一章），这里把文字切成段落，改章节时尽量让段评还挂在原来那段上。
-// - 你在聊天里把书发给他，他就加入一起读：跟着你读（你翻到第几章，他最多读到第几章），一次读一章，太长的章分几次读。
-//   每次读完写段评、回别人的段评（认不认识那个人，看角色资料里的「他认识谁」）、给自己记读书笔记（以后接着读、聊天时用）。
-// - 书标了「完结」、每章都读完了：写一篇阅读日记，进他的日记。
+// - 你在阅读页右上角把某一章分享给他（share）：聊天里出一张卡片，他只读分享给他的那几章，按分享的顺序一章一章读，太长的章分几次读。
+//   每次读完写段评、回别人的段评（认不认识那个人，看角色资料里的「他认识谁」）、写这一章的梗概（读书笔记，rd.notes）；
+//   读的时候带着他读过的那几章的梗概（和全书梗概），所以跳着分享也接得上。
+// - 笔记页（阅读 App 书名下面「笔记」）：一章一行，能改能删；小铅笔 = 全书梗概（summarize），写好后各章梗概删掉，只留全书的（rd.summary）。
+// - 书标了「完结」、每章都读完了：他自己决定写不写阅读日记（写了进日记），要记住的关于你的事进备忘录。
 // - 你回他的段评、或者在他读过的段落写段评：过一会儿他可能回你。
 // 网页关着什么都不跑：打开时、开着的时候每隔一会儿补算（life.js 的 tick 调 readTick），你翻到新的一章也会马上叫一次（kick）。
 import * as D from './data.js';
@@ -110,6 +112,7 @@ export function removeChapter(bid, chId) {
   const rd = D.readers(bid);
   for (const r of Object.values(rd)) {
     r.read = (r.read || []).filter((x) => x !== chId);
+    r.queue = (r.queue || []).filter((x) => x !== chId);
     if (r.notes) delete r.notes[chId];
     if (r.part?.ch === chId) r.part = null;
   }
@@ -118,33 +121,67 @@ export function removeChapter(bid, chId) {
   if (b) D.saveBook({ ...b, reach: Math.min(b.reach || 0, list.length), pos: b.pos?.ch === chId ? null : b.pos });
 }
 
-// ── 一起读 ──
-/** 他加入一起读（在聊天里把书发给他时） */
-export function join(bid, cid) {
+// ── 分享一章给他 ──
+const readerOf = (bid, cid) => {
   const rd = D.readers(bid);
-  if (!rd[cid]) { rd[cid] = { joined: Date.now(), read: [], notes: {}, part: null }; D.setReaders(bid, rd); }
-  kick(3000);
-}
-/** 不一起读了（他的段评、读书笔记留着） */
-export function leave(bid, cid) {
-  const rd = D.readers(bid);
-  delete rd[cid];
+  rd[cid] ||= { joined: Date.now(), read: [], notes: {}, queue: [], part: null };
+  rd[cid].queue ||= [];
+  return rd;
+};
+/** 你把一章分享给他：排进他要读的（读过的不再读一遍），马上叫一次 */
+export function share(bid, chId, cid) {
+  const rd = readerOf(bid, cid), r = rd[cid];
+  if (!(r.read || []).includes(chId) && !r.queue.includes(chId)) r.queue.push(chId);
+  r.next = 0;
   D.setReaders(bid, rd);
-  D.setBookJobs(D.bookJobs().filter((j) => !(j.book === bid && j.who === cid)));
+  kick(2500);
 }
-/** 他最多读到第几章（从 1 数）：你翻到哪他读到哪；刚邀请、你还没翻开的时候，先读第 1 章 */
-export const limitOf = (b) => Math.min(D.chapters(b.id).length, Math.max(1, b.reach || 0));
-/** 他接下来要读的：{ idx, k }（第几章、这章的第几部分），没有了返回 null */
+/** 他接下来要读的：{ idx, k }（第几章、这章的第几部分），按分享的顺序；没有了返回 null */
 export function nextOf(b, rd) {
-  const chs = D.chapters(b.id), lim = limitOf(b);
-  for (let i = 0; i < lim; i++) {
-    const ch = chs[i];
-    if (!(rd.read || []).includes(ch.id)) return { idx: i, k: rd.part?.ch === ch.id ? rd.part.k : 0 };
+  const chs = D.chapters(b.id);
+  for (const id of rd.queue || []) {
+    const idx = chs.findIndex((ch) => ch.id === id);
+    if (idx < 0 || (rd.read || []).includes(id)) continue;
+    return { idx, k: rd.part?.ch === id ? rd.part.k : 0 };
   }
   return null;
 }
 /** 每一章都读完了 */
 export const finished = (b, rd) => { const chs = D.chapters(b.id); return chs.length > 0 && chs.every((ch) => (rd.read || []).includes(ch.id)); };
+
+// ── 笔记（笔记页能改能删）──
+/** 改一章的梗概（空的 = 删掉）。chId = 'all' 是全书梗概 */
+export function setNote(bid, cid, chId, text) {
+  const rd = D.readers(bid), r = rd[cid];
+  if (!r) return;
+  const t = String(text || '').trim();
+  if (chId === 'all') r.summary = t;
+  else { r.notes ||= {}; if (t) r.notes[chId] = t; else delete r.notes[chId]; }
+  D.setReaders(bid, rd);
+}
+/** 全书梗概（笔记页的小铅笔）：他读过的都写进去，写好以后各章的梗概删掉，只留全书的 */
+const summing = new Set();
+export const summarizing = (bid, cid) => summing.has(bid + '|' + cid);
+export async function summarize(bid, cid) {
+  const b = D.bookById(bid), c = D.charById(cid);
+  if (!b || !c || summing.has(bid + '|' + cid)) return;
+  summing.add(bid + '|' + cid);
+  D.emit('bookrd', bid);
+  try {
+    const j = parseJSON(await ask(c, C.buildBookSummary(c, b), 2500));
+    const text = String(j?.summary || '').trim();
+    if (!text) throw new Error('这次没写成');
+    const rd = D.readers(bid), r = rd[cid];
+    if (!r) return;
+    r.summary = text;
+    r.summaryTs = Date.now();
+    r.notes = {};
+    D.setReaders(bid, rd);
+  } finally {
+    summing.delete(bid + '|' + cid);
+    D.emit('bookrd', bid);
+  }
+}
 
 // ── 你写段评 ──
 /** 你写一条（to = 回复哪条）。回的是他：过一会儿他可能回你（不一定回，话说到头了就不回）；直接写在某段下面：读过这章的人可能会来看看（最多两个） */
@@ -225,7 +262,7 @@ async function readJob(b, cid) {
     const note = String(j.note || '').trim();
     rd.notes ||= {};
     if (note) rd.notes[ch.id] = k > 0 && rd.notes[ch.id] ? rd.notes[ch.id] + '\n' + note : note;
-    if (k + 1 >= parts.length) { rd.read = [...new Set([...(rd.read || []), ch.id])]; rd.part = null; }
+    if (k + 1 >= parts.length) { rd.read = [...new Set([...(rd.read || []), ch.id])]; rd.queue = (rd.queue || []).filter((x) => x !== ch.id); rd.part = null; }
     else rd.part = { ch: ch.id, k: k + 1 };
     rd.tries = 0; rd.next = 0; rd.last = Date.now();
     D.setReaders(b.id, rdAll);
@@ -258,25 +295,26 @@ async function replyJob(job) {
   else if (!job.last && D.charById(cm.who) && Math.random() < 0.4) D.setBookJobs([...D.bookJobs(), { book: b.id, who: cm.who, cm: r.id, kind: 'reply', due: Date.now() + rand(3, 20) * MIN, last: true }]);
 }
 
-/** 整本读完：阅读日记，进他的日记（带上是哪本书）。日记里新知道的关于你的事也记进备忘录 */
+/** 整本读完：他自己决定写不写阅读日记（写了进他的日记，带上是哪本书）；新知道的关于你的事记进备忘录。rd.review = 日记 id / 'none'（没写） */
 async function reviewJob(b, cid) {
   const c = D.charById(cid);
   if (!c) return;
   setNow({ book: b.id, who: cid, ch: 'review' }, b.id);
   try {
     const j = parseJSON(await ask(c, C.buildReadReview(c, b), 2200));
-    if (!j || !String(j.diary || '').trim()) throw new Error('阅读日记没写成');
+    const write = j && j.write !== false && !!String(j.diary || '').trim();
+    if (!j || (j.write !== false && !write)) throw new Error('阅读日记没写成');
     const rdAll = D.readers(b.id);
     if (!rdAll[cid] || !D.charById(cid)) return;
-    const d = { id: D.uid(), date: /^\d{4}-\d{2}-\d{2}$/.test(j.date || '') ? j.date : ymd(), ts: Date.now(), text: String(j.diary).trim(), inner: String(j.inner || '').trim(), keys: arr(j.keywords).map(String).filter(Boolean).slice(0, 12), book: b.id, bookTitle: b.title };
-    D.setDiaries(cid, [...D.diaries(cid), d]);
+    const d = write ? { id: D.uid(), date: /^\d{4}-\d{2}-\d{2}$/.test(j.date || '') ? j.date : ymd(), ts: Date.now(), text: String(j.diary).trim(), inner: String(j.inner || '').trim(), keys: arr(j.keywords).map(String).filter(Boolean).slice(0, 12), book: b.id, bookTitle: b.title } : null;
+    if (d) D.setDiaries(cid, [...D.diaries(cid), d]);
     const memo = D.memos(cid);
     const add = arr(j.memo_add).map(String).map((s) => s.trim()).filter(Boolean).filter((s) => !memo.some((m) => m.text === s));
     if (add.length) D.setMemos(cid, [...memo, ...add.map((text) => ({ id: D.uid(), text, ts: Date.now(), auto: true }))]);
-    rdAll[cid].review = d.id;
+    rdAll[cid].review = d ? d.id : 'none';
     rdAll[cid].last = Date.now();
     D.setReaders(b.id, rdAll);
-    D.emit('notify', { diary: cid, text: `${D.nameOf(c)}写了《${b.title}》的阅读日记` });
+    if (d) D.emit('notify', { diary: cid, text: `${D.nameOf(c)}写了《${b.title}》的阅读日记` });
   } finally {
     setNow(null, b.id);
   }

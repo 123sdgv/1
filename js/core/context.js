@@ -347,13 +347,15 @@ export function chunksOf(ch) {
   return out.length ? out : [[]];
 }
 const chTitle = (ch, i) => `第 ${i + 1} 章${ch.title ? ' ' + ch.title : ''}`;
-/** 读书笔记：按章的顺序，太长了从前面开始裁 */
-function notesText(rd, chs, upto, max) {
+/** 他读过的（自己写的梗概）：全书梗概 + 各章梗概（按章的顺序，跳着读也一样；except = 现在读的这章不算）。太长了从前面的章开始裁 */
+function knownText(rd, chs, except, max) {
   const rows = [];
-  chs.forEach((ch, i) => { if (i < upto && rd.notes?.[ch.id]) rows.push(`${chTitle(ch, i)}：${rd.notes[ch.id]}`); });
+  chs.forEach((ch, i) => { if (ch.id !== except && rd.notes?.[ch.id]) rows.push(`${chTitle(ch, i)}：${rd.notes[ch.id]}`); });
   let out = rows.join('\n'), cutHead = false;
-  while (out.length > max && rows.length > 1) { rows.shift(); out = rows.join('\n'); cutHead = true; }
-  return (cutHead ? '（更早的笔记记不太清了）\n' : '') + cut(out, max);
+  const room = Math.max(1000, max - (rd.summary ? Math.min(rd.summary.length, max / 2) : 0));
+  while (out.length > room && rows.length > 1) { rows.shift(); out = rows.join('\n'); cutHead = true; }
+  const head = rd.summary ? `全书梗概（你之前写的）：${cut(rd.summary, max / 2)}\n` : '';
+  return head + (cutHead ? '（更早的几章记不太清了）\n' : '') + cut(out, room);
 }
 
 /** 读一章（第 k 部分）。返回 { msgs, nums }：nums[编号] = 段评 id，他回复时按编号找 */
@@ -364,7 +366,7 @@ export function buildReadChapter(c, b, chIdx, k) {
   const parts = chunksOf(ch);
   const idx = parts[k] || [];
   const text = idx.map((i) => `[${i + 1}] ${ch.paras[i].text}`).join('\n');
-  let notes = notesText(rd, chs, chIdx, READ.notes);
+  let notes = knownText(rd, chs, ch.id, READ.notes);
   if (k > 0 && rd.notes?.[ch.id]) notes += `\n${chTitle(ch, chIdx)}（前面的部分）：${rd.notes[ch.id]}`;
   // 这一章已经有的段评（最近 40 条），编上号
   const pIdx = new Map(ch.paras.map((p, i) => [p.id, i]));
@@ -421,22 +423,39 @@ export function buildReadReview(c, b) {
   return [{ role: 'user', content: T.readReviewPrompt({
     c, me, title: b.title, chTotal: chs.length, today: ymd(Date.now()),
     identityText: identityOf(c), memoryText: memoryOf(c, b.title, { mails: false }),
-    notes: notesText(rd, chs, chs.length, READ.reviewNotes) || '（没有记笔记）', talk, others,
+    notes: knownText(rd, chs, null, READ.reviewNotes).trim() || '（没有记笔记）', talk, others,
+  }) }];
+}
+
+/** 全书梗概（笔记页的小铅笔）：他读过的各章梗概 + 之前写过的全书梗概 → 一篇 */
+export function buildBookSummary(c, b) {
+  const chs = D.chapters(b.id), rd = D.readers(b.id)[c.id] || {};
+  const read = chs.filter((ch) => (rd.read || []).includes(ch.id)).length;
+  return [{ role: 'user', content: T.bookSummaryPrompt({
+    c, title: b.title, chTotal: chs.length, read, done: !!b.done,
+    identityText: identityOf(c), known: knownText(rd, chs, null, READ.reviewNotes).trim() || '（没有记笔记）',
   }) }];
 }
 
 /** 他在一起读的书里，聊天时会告诉他的那两本（最近读的在前） */
-const readingBooks = (c) => D.booksReadBy(c.id).filter((b) => b.acc === c.acc).sort((a, z) => (z.lastTs || 0) - (a.lastTs || 0)).slice(0, 2);
+const rdLast = (b, c) => { const r = D.readers(b.id)[c.id] || {}; return Math.max(r.last || 0, r.joined || 0); };
+const readingBooks = (c) => D.booksReadBy(c.id).filter((b) => b.acc === c.acc).sort((a, z) => rdLast(z, c) - rdLast(a, c)).slice(0, 2);
+/** 第几章：1、2、5（太多了只写前 12 个） */
+const chNos = (chs, ids) => { const n = chs.map((ch, i) => (ids.includes(ch.id) ? i + 1 : 0)).filter(Boolean); return n.slice(0, 12).join('、') + (n.length > 12 ? '…' : ''); };
 /** 聊天时告诉他：在和你一起读哪本书、读到哪、最近的笔记、你最近写的段评（最多两本，最近读的在前） */
 function readingOf(c) {
   const acc = accOf(c), me = meName(acc);
   return readingBooks(c).map((b) => {
     const chs = D.chapters(b.id), rd = D.readers(b.id)[c.id];
-    const read = chs.filter((ch) => rd.read?.includes(ch.id));
+    const read = rd.read || [], wait = (rd.queue || []).filter((id) => !read.includes(id));
     const last = [...chs].reverse().find((ch) => rd.notes?.[ch.id]);
     const mine = D.bookCmts(b.id).filter((x) => x.who === 'me').slice(-2).map((x) => `「${cut(x.text, 60)}」`).join('');
-    const where = rd.review ? `你们一起读完了，你写过阅读日记` : read.length ? `你读完了 ${read.length} 章（现在一共 ${chs.length} 章${b.done ? '，已完结' : '，还在更新'}），${me}翻到了第 ${Math.max(1, b.reach || 0)} 章` : `${me}刚邀请你一起读，你还没开始读（现在一共 ${chs.length} 章）`;
-    return [`《${b.title}》：${where}。`, last && !rd.review ? `你最近的读书笔记：${cut(rd.notes[last.id], 200)}` : '', mine ? `${me}最近写的段评：${mine}` : ''].filter(Boolean).join(' ');
+    const where = [
+      read.length ? `你读过第 ${chNos(chs, read)} 章（一共 ${chs.length} 章${b.done ? '，已完结' : '，还在更新'}）` : '',
+      wait.length ? `${me}分享给你的第 ${chNos(chs, wait)} 章你还没读完` : '',
+      rd.review && rd.review !== 'none' ? '整本读完了，你写过阅读日记' : '',
+    ].filter(Boolean).join('；') || `${me}分享给你的章节你还没开始读`;
+    return [`《${b.title}》（${me}在阅读 App 里分享给你的书，你只读过分享给你的章节）：${where}。`, rd.summary ? `你写的全书梗概：${cut(rd.summary, 300)}` : last ? `你最近写的梗概：${cut(rd.notes[last.id], 200)}` : '', mine ? `${me}最近写的段评：${mine}` : ''].filter(Boolean).join(' ');
   });
 }
 
@@ -461,9 +480,8 @@ function mentionedOf(c, list) {
     const mine = D.bookCmts(b.id).filter((x) => x.who === 'me').slice(-2).map((x) => `「${cut(x.text, 60)}」`).join('');
     let his = '';
     if (rd) {
-      const n = chs.filter((ch) => rd.read?.includes(ch.id)).length;
       const last = [...chs].reverse().find((ch) => rd.notes?.[ch.id]);
-      his = rd.review ? '你们一起读完了。' : `你也在一起读，读完了 ${n} 章${last ? `，你最近的读书笔记：${cut(rd.notes[last.id], 200)}` : ''}。`;
+      his = (rd.read || []).length ? `${me}分享给你看过第 ${chNos(chs, rd.read)} 章${rd.summary ? `，你写的全书梗概：${cut(rd.summary, 200)}` : last ? `，你最近写的梗概：${cut(rd.notes[last.id], 200)}` : ''}。` : '';
     }
     return [`《${b.title}》是${me}在手机阅读 App 里读的书：${where}。`, mine ? `${me}最近写的段评：${mine}` : '', his].filter(Boolean).join(' ');
   });

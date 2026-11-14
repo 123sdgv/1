@@ -25,14 +25,6 @@
 .bk-info h2 { margin: 0; font: 600 21px/1.35 var(--serif); word-break: break-word; }
 .bk-info small { display: block; min-height: 1.2em; margin: 4px 0 12px; font-size: 12.5px; color: var(--ink-3); }
 .bk-go { height: 40px; padding: 0 18px; border-radius: 20px; font-size: 15px; }
-.bk-rd { display: flex; gap: 14px; overflow-x: auto; padding: 0 20px 18px; scrollbar-width: none; }
-.bk-rd-it { flex: none; width: 52px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
-.bk-rd-it small { font-size: 11.5px; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.bk-rd-it .dots3 { height: 16px; color: var(--ink-2); }
-.bk-rd-it .dots3 i { width: 4px; height: 4px; }
-.bk-rd-plus { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1.2px var(--line); color: var(--ink-2); background: rgba(255,255,255,.6); }
-.bk-rd-plus .ic { width: 18px; height: 18px; }
-.bk-rd-add small { height: 14px; }
 .av.now { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--ink); animation: rdpulse 1.4s infinite; }
 @keyframes rdpulse { 50% { opacity: .55; } }
 .toc { margin: 0 16px 22px; background: var(--card); border-radius: 14px; overflow: hidden; }
@@ -64,12 +56,6 @@
 .rd-bt { min-width: 0; max-width: 52vw; font-size: 14px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rd-body { padding: 8px 26px 6px; font: var(--rfs, 19px)/2 var(--serif); letter-spacing: .02em; color: #1c1c1a; }
 .rd-ct { margin: 16px 0 6px; font: 600 1.32em/1.45 var(--serif); letter-spacing: .04em; }
-.rd-who { display: flex; gap: 6px; min-height: 4px; margin: 0 0 20px; }
-.rd-who-it { display: flex; opacity: .32; }
-.rd-who-it .av { width: 22px; height: 22px; }
-.rd-who-it .av b { font-size: 10px; }
-.rd-who-it.read { opacity: 1; }
-.rd-who-it.now { opacity: 1; animation: rdpulse 1.2s infinite; }
 .rd-p { margin: 0 0 .85em; text-indent: 2em; text-align: justify; word-break: break-word; -webkit-touch-callout: none; border-radius: 6px; transition: background .2s; }
 .rd-p.pressed, .rd-p.on { filter: none; background: rgba(0,0,0,.06); }
 .rd-cm { display: inline-flex; margin-left: .3em; padding: 2px; vertical-align: -.16em; color: #9a9a96; text-indent: 0; }
@@ -115,13 +101,6 @@ body.kb .sheet.half { height: 94%; }
 .rs .grp { margin-bottom: 8px; }
 
 /* 他的读书笔记 */
-.rn { padding-bottom: 6px; }
-.rn-review { display: block; width: calc(100% - 32px); margin: 0 16px 18px; padding: 14px 16px; text-align: left; background: #FDFCF8; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
-.rn-review small { display: block; margin-bottom: 6px; font-size: 11px; letter-spacing: .2em; color: var(--ink-3); }
-.rn-review .p { font: 15px/1.9 var(--serif); margin: 0 0 8px; }
-.rn-it { margin: 0 20px 16px; }
-.rn-it b { display: block; margin-bottom: 4px; font-size: 13px; font-weight: 500; color: var(--ink-2); }
-.rn-it .p { font: 15px/1.85 var(--serif); margin: 0 0 6px; -webkit-user-select: text; user-select: text; }
 
 /* 聊天里的书（卡片）、挑书 */
 .card.bookc { width: 226px; background: #fff; color: var(--ink); box-shadow: inset 0 0 0 1px #DADAD7; }
@@ -135,3 +114,14 @@ body.kb .sheet.half { height: 94%; }
 
 /* 日记里的阅读日记：右边写着书名 */
 .dy-book { margin-left: auto; font-style: normal; font: 13px var(--serif); color: var(--ink-2); max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 笔记：书名下面那个「笔记」、他的笔记列表（像备忘录）、一条整页 */
+.bk-notes { display: inline-block; margin: 6px 0 0; padding: 0; font-size: 14px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
+.bk-info .bk-notes + small { margin-top: 6px; }
+.nt-list { margin: 14px 16px 0; background: #fff; border-radius: 14px; overflow: hidden; }
+.nt-list .sw-wrap { background: #fff; }
+.nt-row { width: 100%; display: flex; flex-direction: column; gap: 2px; padding: 13px 16px; text-align: left; border-top: 1px solid var(--line); }
+.nt-list > .sw-wrap:first-child .nt-row, .nt-busy + .sw-wrap .nt-row { border-top: 0; }
+.nt-row b { font-size: 16px; font-weight: 600; }
+.nt-row small { font-size: 13px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-busy { padding: 14px 16px; color: var(--ink-3); }

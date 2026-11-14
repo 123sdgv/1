@@ -304,6 +304,14 @@ export function openChat(ctx, cid, { at = null } = {}) {
     }
     if (p.t === 'soup') return soupCard(p);
     if (p.t === 'ask') return h('div', { class: 'bub' }, h('em', { class: 'ask-t', text: '问' }), p.text);
+    // 你在阅读 App 里分享给他的一章：点了打开那一章
+    if (p.t === 'chapter') {
+      const b = D.bookById(p.book);
+      const ok = b && D.chapters(b.id).some((ch) => ch.id === p.ch);
+      return h('button', { class: 'card bookc', onclick: () => (ok ? openApp('read', { book: b.id, ch: p.ch }) : toast('这一章已经删掉了')) },
+        h('div', { class: 'cd-top' }, bookCover(p.title, '', { mini: true }), h('div', {}, h('b', { text: `《${b?.title || p.title}》` }), h('small', { text: `第 ${p.no} 章${p.chTitle ? ' · ' + p.chTitle : ''}` }))),
+        h('div', { class: 'cd-foot', text: '分享' }));
+    }
     if (p.t === 'book') {
       const b = D.bookById(p.book), n = b ? D.chapters(b.id).length : 0;
       return h('button', { class: 'card bookc', onclick: () => (b ? openApp('read', { book: b.id }) : toast('这本书已经删掉了')) },

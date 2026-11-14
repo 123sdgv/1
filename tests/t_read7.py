@@ -1,4 +1,4 @@
-"""阅读（第七版）：聊天加号里没有「一起读」；书页「一起读的人」最后一个 ＋ 邀请；聊天里提到《书名》他就知道这本书；你回他的段评，他可以不回"""
+"""阅读（第七版）：聊天加号里没有「一起读」；聊天里提到《书名》他就知道这本书；你回他的段评，他可以不回"""
 import asyncio, json, sys
 from harness import Phone, check
 
@@ -29,14 +29,8 @@ async def main(size):
         await ph.top('.ch-send').click(); await asyncio.sleep(3.5)
         last = ph.api.calls[-1]['messages'][-1]['content']
         check('聊天里提到的书' not in last, '没有书名号不算')
-        # 书页：＋ 邀请
-        await ph.open('read', {'book': 'b1'}); await asyncio.sleep(0.6)
-        await ph.shot(f'read7_book_{size[0]}')
-        await ph.top('button[aria-label="邀请一起读"]').click(); await asyncio.sleep(0.5)
-        await ph.page.locator('.sheet .pick-it').first.click(); await asyncio.sleep(0.6)
-        rd = await ph.page.evaluate("__xsj.D.readers('b1')")
-        check(list(rd.keys()) == ['c0'], f'邀请了阿一：{list(rd.keys())}')
-        await ph.shot(f'read7_joined_{size[0]}')
+        # 分享一章给阿一（第七版改版：没有邀请了）
+        await ph.page.evaluate("import('./js/core/read.js').then(R => R.share('b1', __xsj.D.chapters('b1')[0].id, 'c0'))")
         # 他在读、又提到书名：上面「你在读的书」已经说了，不重复
         await ph.open('social', {'chat': 'c0'})
         await ph.top('textarea.ch-in').fill('《雪国》第二章你看了吗'); await ph.top('.ch-send').click(); await asyncio.sleep(3.5)

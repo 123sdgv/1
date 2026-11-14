@@ -1,13 +1,16 @@
-// 阅读：书架 → 一本书（目录、一起读的人、完结）→ 读。
+// 阅读：书架 → 一本书（笔记、完结、目录）→ 读。
 // 读的页面学网文 App：大字、首行缩进、段尾一个小气泡写着几条段评，点开从下面冒出半屏的段评；背景能换图、调大小模糊和淡、调字号。
 // 一次上传一章（一段文字一章，也能从 .txt 导进来）。长按一段写段评。
-// 一起读：在聊天里点加号把书发给角色，他就跟着你一章一章读（core/read.js）。这里只看：谁在读、读到哪、他的读书笔记。
+// 分享：读的页面右上角把这一章分享给一个角色 → 聊天里出一张卡片、跳到跟他的聊天，他在后台读这一章、写段评和梗概（core/read.js）。
+// 笔记：书名下面「笔记」→ 角色名单 → 他这本书的笔记（一章一行，左滑删；点进去整页，⭕ 改 ✅ 直接存；右上角铅笔 = 全书梗概）。
 import { h, Stack, page, avatar, icon, btnIc, toast, confirm, ask, longPress, autosize, sheet, popbar, group, row, toggleRow, slideRow, pickImage, paras, inlineEdit, inlineEditing } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import * as R from '../../core/read.js';
 import { hm, ago } from '../../core/time.js';
 import { bookCover, pickChar } from '../shared.js';
 import { openApp } from '../../phone/window.js';
+import * as CS from '../../core/chat.js';
+import { swipeRow, modeBtn } from '../../core/ui.js';
 
 const meName = () => D.curAccount().name || '我';
 const whoOf = (w) => (w === 'me' ? { name: meName(), avatar: D.curAccount().avatar } : (() => { const c = D.charById(w); return { name: c ? D.nameOf(c) : '读者', avatar: c?.avatar }; })());
@@ -77,22 +80,10 @@ export function mount(body, { close, arg }) {
       p.scroll.innerHTML = '';
       p.scroll.append(h('div', { class: 'bk-head' }, bookCover(b.title, 'big'),
         h('div', { class: 'bk-info' }, h('h2', { text: b.title }),
+          // 作者的位置放「笔记」：点了先选看谁的
+          h('button', { class: 'bk-notes', text: '笔记', onclick: () => notesWho(bid) }),
           h('small', { text: chs.length ? `${chs.length} 章 · ${wan(wordsOf(chs))}` : '' }),
           chs.length ? h('button', { class: 'btn bk-go', text: i >= 0 ? `继续读 · 第 ${i + 1} 章` : '开始读', onclick: () => openReader(bid) }) : null)));
-      // 一起读的人：头像一排，最后一个 ＋ 邀请（这个身份里还没加入的角色）。邀请只在这里（聊天里的「一起读」删了）
-      const rd = D.readers(bid), ids = Object.keys(rd).filter((id) => D.charById(id));
-      const canAdd = D.chars().some((c) => !rd[c.id]);
-      if (ids.length || canAdd) {
-        const nw = R.readingNow();
-        p.scroll.append(h('div', { class: 'bk-rd' }, ids.map((cid) => {
-          const c = D.charById(cid), r = rd[cid];
-          const busy = nw?.book === bid && nw.who === cid;
-          const st = r.review ? '读完了' : busy ? '' : `${(r.read || []).length} / ${chs.length}`;
-          return h('button', { class: 'bk-rd-it', onclick: () => readerSheet(bid, cid) }, avatar(c.avatar, D.nameOf(c), 'sm' + (busy ? ' now' : '')),
-            busy ? h('span', { class: 'dots3' }, h('i'), h('i'), h('i')) : h('small', { text: st }));
-        }), canAdd ? h('button', { class: 'bk-rd-it bk-rd-add', 'aria-label': '邀请一起读', onclick: () => pickChar('一起读', (c) => R.join(bid, c.id), (c) => !D.readers(bid)[c.id]) },
-          h('span', { class: 'bk-rd-plus', html: icon('plus') }), h('small', { text: '' })) : null));
-      }
       p.scroll.append(group('', toggleRow({ label: '完结', value: b.done, onchange: (v) => { D.saveBook({ ...D.bookById(bid), done: v }); if (v) R.kick(); } })));
       if (!chs.length) p.scroll.append(h('div', { class: 'empty' }, h('b', { text: '还没有章节' })));
       else {
@@ -169,7 +160,7 @@ export function mount(body, { close, arg }) {
     const startY = !chId && idx >= 0 ? b.pos?.y || 0 : 0;
     if (idx < 0) idx = 0;
     const ttl = h('span', { class: 'rd-bt', text: b.title });
-    const p = page({ title: '', left: h('div', { class: 'rd-left' }, h('button', { class: 'bk', 'aria-label': '返回', html: icon('back'), onclick: () => stack.pop() }), ttl), right: btnIc('aa', () => setSheet(), '阅读设置') });
+    const p = page({ title: '', left: h('div', { class: 'rd-left' }, h('button', { class: 'bk', 'aria-label': '返回', html: icon('back'), onclick: () => stack.pop() }), ttl), right: [btnIc('fwd', () => shareCh(), '分享这一章'), btnIc('aa', () => setSheet(), '阅读设置')] });
     p.el.classList.add('rd');
     const bg = h('div', { class: 'rd-bg' });
     p.el.prepend(bg);
@@ -206,28 +197,12 @@ export function mount(body, { close, arg }) {
         if (bb) el.append(bb);
       }
     }
-    // 章名下面一排小头像：读过这章的、正在读的（一闪一闪）、还没读的（淡）
-    const who = h('div', { class: 'rd-who' });
-    function drawWho() {
-      const ch = chs()[idx];
-      who.innerHTML = '';
-      if (!ch) return;
-      const rd = D.readers(bid), nw = R.readingNow();
-      for (const [cid, r] of Object.entries(rd)) {
-        const c = D.charById(cid);
-        if (!c) continue;
-        const st = nw?.book === bid && nw.who === cid && nw.ch === ch.id ? 'now' : (r.read || []).includes(ch.id) ? 'read' : '';
-        who.append(h('button', { class: 'rd-who-it ' + st, 'aria-label': D.nameOf(c), onclick: () => readerSheet(bid, cid) }, avatar(c.avatar, D.nameOf(c), 'xs')));
-      }
-    }
-
     function render(y = 0) {
       const list = chs(), ch = list[idx];
       bodyEl.innerHTML = '';
       if (!ch) { bodyEl.append(h('div', { class: 'empty' }, h('b', { text: '还没有章节' }))); return; }
       const cs = countsOf(ch);
-      bodyEl.append(h('h2', { class: 'rd-ct', text: chName(ch, idx) }), who);
-      drawWho();
+      bodyEl.append(h('h2', { class: 'rd-ct', text: chName(ch, idx) }));
       for (const para of ch.paras) {
         const el = h('p', { class: 'rd-p', 'data-id': para.id }, para.text, bubble(ch, para.id, cs[para.id]));
         longPress(el, () => cmtSheet(ch, para.id, true));
@@ -240,13 +215,23 @@ export function mount(body, { close, arg }) {
         h('button', { 'aria-label': '目录', html: icon('toc'), onclick: () => tocSheet() }),
         h('button', { 'aria-label': '下一章', html: icon('right'), disabled: last || null, onclick: () => go(idx + 1) })));
       requestAnimationFrame(() => { p.scroll.scrollTop = y * Math.max(0, p.scroll.scrollHeight - p.scroll.clientHeight); status(); });
-      // 翻到这一章了：一起读的人可以读到这里
+      // 你翻到过第几章（聊天时他知道你读到哪）
       b = D.bookById(bid);
-      if (b && (b.reach || 0) < idx + 1) { D.saveBook({ ...b, reach: idx + 1, lastTs: Date.now() }); R.kick(); }
+      if (b && (b.reach || 0) < idx + 1) D.saveBook({ ...b, reach: idx + 1, lastTs: Date.now() });
       else if (b) D.saveBook({ ...b, lastTs: Date.now() });
       D.setBookPos(bid, { ch: ch.id, y });
     }
     function go(i) { if (i < 0 || i >= chs().length) return; idx = i; render(0); }
+    // 分享这一章：选一个角色 → 他排上读这一章，聊天里发一张卡片，跳到跟他的聊天
+    function shareCh() {
+      const ch = chs()[idx], bk = D.bookById(bid);
+      if (!ch || !bk) return;
+      pickChar('', (c) => {
+        R.share(bid, ch.id, c.id);
+        CS.send(c.id, [{ t: 'chapter', book: bid, ch: ch.id, title: bk.title, chTitle: ch.title || '', no: idx + 1 }]);
+        openApp('social', { chat: c.id });
+      });
+    }
 
     // 底下一行：第几章 / 一共几章 · 这章读了多少，右边是时间
     let st = 0;
@@ -380,7 +365,6 @@ export function mount(body, { close, arg }) {
       D.on('readConf', applyConf),
       D.on('file', (k) => k === 'readBg' && applyConf()),
       D.on('bookcm', (id) => id === bid && drawBubbles()),
-      D.on('bookrd', (id) => id === bid && drawWho()),
       D.on('bookch', (id) => { if (id !== bid) return; if (idx >= chs().length) idx = Math.max(0, chs().length - 1); render(status()); }),
       D.on('books', (id) => { if (id && id !== bid) return; const x = D.bookById(bid); if (!x) return; ttl.textContent = x.title; }),
     ];
@@ -388,19 +372,71 @@ export function mount(body, { close, arg }) {
     render(startY);
   }
 
-  // ── 他：读到哪、读书笔记、阅读日记；不一起读了 ──
-  function readerSheet(bid, cid) {
-    const c = D.charById(cid), rd = D.readers(bid)[cid];
-    if (!c || !rd) return;
-    const chs = D.chapters(bid);
-    const review = rd.review && D.diaries(cid).find((d) => d.id === rd.review);
-    const notes = chs.map((ch, k) => (rd.notes?.[ch.id] ? h('div', { class: 'rn-it' }, h('b', { text: chName(ch, k) }), paras(rd.notes[ch.id])) : null)).filter(Boolean);
-    const box = h('div', { class: 'rn' },
-      review ? h('button', { class: 'rn-review', onclick: () => { s.close(); openApp('diary', { char: cid }); } }, h('small', { text: '阅读日记' }), paras(review.text)) : null,
-      notes,
-      !notes.length && !review ? h('div', { class: 'empty' }, h('b', { text: '还没有读书笔记' })) : null,
-      group('', row({ label: '不一起读了', cls: 'danger center', chev: false, onclick: async () => { if (await confirm(`${D.nameOf(c)}不一起读了？`, '', '好', true)) { R.leave(bid, cid); s.close(); } } })));
-    const s = sheet({ title: D.nameOf(c), body: box, full: notes.length > 1 || !!review });
+  // ── 笔记：书名下面「笔记」→ 角色名单（只有名字）→ 他这本书的笔记 ──
+  function notesWho(bid) {
+    const rd = D.readers(bid);
+    const ids = Object.keys(rd).filter((cid) => D.charById(cid) && (rd[cid].summary || Object.keys(rd[cid].notes || {}).length || (rd[cid].read || []).length));
+    const box = h('div', { class: 'pick-list' });
+    const s = sheet({ title: '', body: box });
+    if (!ids.length) box.append(h('div', { class: 'empty', text: '还没有' }));
+    for (const cid of ids) box.append(h('button', { class: 'pick-it', onclick: () => { s.close(); openNotes(bid, cid); } }, h('b', { text: D.nameOf(D.charById(cid)) })));
+  }
+  // 他的笔记：像备忘录的列表，一行一章（全书梗概在最上面）。左滑红色点了就删；点一行进整页；右上角铅笔 = 写全书梗概（先问一句）
+  function openNotes(bid, cid) {
+    const pen = btnIc('edit', async () => {
+      if (R.summarizing(bid, cid)) return;
+      if (!(await confirm('写全书梗概？', '', '写'))) return;
+      R.summarize(bid, cid).catch((e) => toast('没写成：' + (e.message || '出错了')));
+    }, '写全书梗概');
+    const p = page({ title: '笔记', onBack: () => stack.pop(), right: pen });
+    p.el.classList.add('nt-pg');
+    const draw = () => {
+      const b = D.bookById(bid), rd = D.readers(bid)[cid];
+      if (!b || !rd) { if (stack.top?.el === p.el) stack.pop(); return; }
+      const chs = D.chapters(bid), busy = R.summarizing(bid, cid);
+      pen.hidden = !R.finished(b, rd) && !rd.summary;
+      pen.disabled = busy;
+      p.scroll.innerHTML = '';
+      const list = h('div', { class: 'nt-list' });
+      if (busy) list.append(h('div', { class: 'nt-busy' }, h('span', { class: 'dots3' }, h('i'), h('i'), h('i'))));
+      const rows = [];
+      if (rd.summary) rows.push(['all', '全书', rd.summary]);
+      chs.forEach((ch, k) => { if (rd.notes?.[ch.id]) rows.push([ch.id, chName(ch, k), rd.notes[ch.id]]); });
+      for (const [key, name, text] of rows) {
+        const it = h('button', { class: 'nt-row', onclick: () => openNote(bid, cid, key, name) }, h('b', { text: name }), h('small', { text: text.split('\n')[0] }));
+        list.append(swipeRow(it, () => R.setNote(bid, cid, key, '')));
+      }
+      if (!rows.length && !busy) p.scroll.append(h('div', { class: 'empty' }, h('b', { text: '还没有笔记' })));
+      else p.scroll.append(list);
+    };
+    const offs2 = [D.on('bookrd', (id) => id === bid && draw()), D.on('bookch', (id) => id === bid && draw())];
+    stack.push({ el: p.el, onShow: draw, onDestroy: () => offs2.forEach((f) => f()) });
+    draw();
+  }
+  // 一条笔记整页：平时只能看；右上角 ⭕ 改（整页打字），✅ 直接存（不问）。改成空的 = 删掉。改到一半返回也存
+  function openNote(bid, cid, key, name) {
+    const get = () => { const rd = D.readers(bid)[cid]; return key === 'all' ? rd?.summary || '' : rd?.notes?.[key] || ''; };
+    let editing = false, ta = null;
+    const mode = modeBtn(() => (editing ? done() : start()));
+    const p = page({ title: name, onBack: () => { if (editing) save(); stack.pop(); }, right: mode, cls: 'tp nt-one' });
+    const view = () => { p.scroll.innerHTML = ''; p.scroll.append(h('div', { class: 'tp-ro' }, get())); };
+    function start() {
+      editing = true; mode.set(true);
+      ta = h('textarea', { class: 'tp-ta', spellcheck: 'false' });
+      ta.value = get();
+      p.scroll.innerHTML = '';
+      p.scroll.append(ta);
+      setTimeout(() => ta.focus(), 60);
+    }
+    function save() { if (ta) R.setNote(bid, cid, key, ta.value); }
+    function done() {
+      ta?.blur(); save();
+      editing = false; mode.set(false); ta = null;
+      if (!get()) { stack.pop(); return; }
+      view();
+    }
+    stack.push({ el: p.el, guard: () => editing, onBack: () => { if (editing) save(); stack.pop(); } });
+    view();
   }
 
   const go = (a) => {

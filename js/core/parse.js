@@ -189,6 +189,7 @@ export function partText(p, full = false) {
     case 'note': return `（${p.text}）`;
     case 'fwd': return fwdText(p);
     case 'book': return `[书] 《${p.title}》`;
+    case 'chapter': return `[分享] 《${p.title}》第 ${p.no} 章${p.chTitle ? ' ' + p.chTitle : ''}`;
     // 他自己撤回的：他记得发过什么、也记得撤回了（写成他自己会写的样子）；你撤回的：他没看到内容
     case 'recall': return p.by === 'them' ? `${p.was ? partText(p.was) + '\n' : ''}[撤回]` : '（撤回了一条消息）';
     // 一起玩
@@ -216,6 +217,7 @@ export function partPreview(p) {
     case 'note': return p.text;
     case 'fwd': return '[聊天记录] ' + p.title;
     case 'book': return `[书] 《${p.title}》`;
+    case 'chapter': return `[分享] 《${p.title}》第 ${p.no} 章`;
     case 'recall': return '撤回了一条消息';
     case 'draw': return '[画]';
     case 'game': return '[一起玩]';
