@@ -126,6 +126,9 @@ export function removeChar(id, quiet) {
   }
   S.set('bookJobs', bookJobs().filter((j) => j.who !== id));
   S.set('games', games().filter((g) => g.char !== id));
+  // 音乐：他写的评论留着（匿名的），只是不会再来了
+  if (songs().some((s) => s.know?.[id])) S.set('songs', songs().map((s) => { const know = { ...(s.know || {}) }; delete know[id]; return { ...s, know }; }));
+  S.set('songJobs', songJobs().filter((j) => j.who !== id));
   gcImages();
   if (!quiet) emit('chars');
 }
@@ -366,6 +369,36 @@ export function setBookJobs(arr) { S.set('bookJobs', arr); }
 // 阅读页的样子（所有书共用）：背景图在 file.readBg；size 背景放大多少（%）、blur 模糊、veil 盖在图上的那层多淡（0～1）、font 字号
 /** 聊天背景（每个角色一张）：图在 file.chatbg.<角色id>，大小 / 模糊 / 淡存在角色的 bg 里 */
 export const chatBgOf = (c) => ({ size: 100, blur: 0, veil: 0.25, ...(c?.bg || {}) });
+// ── 音乐（不分身份，所有号共用）──
+// 歌 { id, title, artist, lyricist, composer, lines: [{ t（秒，纯文字歌词是 null）, text }], dur（秒）, link（汽水 / Spotify 的分享链接）, fav, know: { 角色id: 什么时候知道的（推荐给他 / 聊天里提到过）}, pass（这首歌下面的路人 id）, ts }
+// 封面图在 file.song.<歌id>；评论在 songcm.<歌id>：{ id, who: me / 角色id / p.xxx（路人）, to（回复哪条）, text, sticker, ts, likes: [谁], dislikes: [谁] }
+export const songs = () => S.get('songs', []);
+export const songById = (id) => songs().find((s) => s.id === id) || null;
+export function saveSong(s) {
+  const list = songs();
+  const i = list.findIndex((x) => x.id === s.id);
+  if (i < 0) list.push(s); else list[i] = s;
+  S.set('songs', list);
+  emit('songs', s.id);
+  return s;
+}
+export function removeSong(id) {
+  S.set('songs', songs().filter((s) => s.id !== id));
+  S.del('songcm.' + id);
+  setFile('song.' + id, null);
+  S.set('songJobs', songJobs().filter((j) => j.song !== id));
+  emit('songs', id);
+}
+export const songCmts = (id) => S.get('songcm.' + id, []);
+export function setSongCmts(id, arr) { S.set('songcm.' + id, arr); emit('songcm', id); }
+export const songJobs = () => S.get('songJobs', []);
+export function setSongJobs(arr) { S.set('songJobs', arr); }
+/** 上次放的是哪首（再打开音乐 App 时停在这首） */
+export const musicLast = () => S.get('musicLast', null);
+export function setMusicLast(id) { S.set('musicLast', id); }
+/** 匿名身份用的种子：每台手机一个，存好就不变（名字、头像按它算，所以一直是同一个） */
+export function musicSeed() { return S.get('musicSeed') || S.set('musicSeed', uid() + uid()); }
+
 export const readConf = () => ({ size: 100, blur: 0, veil: 0.72, font: 19, ...S.get('readConf', {}) });
 export function setReadConf(patch) { S.set('readConf', { ...readConf(), ...patch }); emit('readConf'); }
 

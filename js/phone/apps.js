@@ -10,6 +10,7 @@ export const APPS = [
   { id: 'tarot', name: '塔罗', load: () => import('../apps/tarot/index.js') },
   { id: 'game', name: '游戏', load: () => import('../apps/game/index.js') },
   { id: 'album', name: '相册', load: () => import('../apps/album/index.js') },
+  { id: 'music', name: '音乐', load: () => import('../apps/music/index.js') },
   { id: 'weather', name: '天气', load: () => import('../apps/weather/index.js') },
   { id: 'settings', name: '设置', load: () => import('../apps/settings/index.js') },
 ];

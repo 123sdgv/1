@@ -4,6 +4,7 @@ import * as T from './prompt.js';
 import { partText, fwdText, drawGrid } from './parse.js';
 import { full, span, sep, ymd, hm, md, rangeText, monthText } from './time.js';
 import { weatherLine } from './weather.js';
+import { anonOf } from './music.js';
 
 const LIMIT = { memo: 120, memoOld: 30, diaryLog: 14000, months: 12, weeks: 6, tlChars: 420, recentDiaries: 3, diaryChars: 700, recall: 2, offlineChat: 12, mails: 4, mailChars: 160, mailThread: 6 };
 
@@ -177,6 +178,7 @@ export function buildChat(c, { extra = null, uptoId = null, skipId = null, canSe
     canSearch: canSearch && !search,
     stickers: D.stickers().map((x) => x.name),
     canBook: D.booksReadBy(c.id).length > 0,
+    canSong: D.songs().some((s) => s.know?.[c.id]),
     identityText: identityOf(c),
     memoryText: memoryOf(c, '', { withRecall: false }),
   });
@@ -188,6 +190,7 @@ export function buildChat(c, { extra = null, uptoId = null, skipId = null, canSe
     T.activity(activityOf(c)),
     T.reading(readingOf(c)),
     T.mentioned(mentionedOf(c, list)),
+    T.songs(songsOf(c, list)),
     T.gamesPlayed(gamesFor(c)),
     search ? T.searchResult({ me, ...search }) : '',
   ] }));
@@ -462,7 +465,7 @@ function readingOf(c) {
 /**
  * 最近几句里出现了《书名》（只认书名号，免得普通的词误触发），而且是这个身份书架上的书：告诉他这本书的简短情况——
  * 你读到哪、你最近写的段评；他也在一起读就加上他读到哪、他的读书笔记。上面「你在读的书」已经说过的就不重复。
- * 以后歌名（音乐 App）也走这套
+ * 歌名（音乐 App）在下面的 songsOf
  */
 const TITLE_RE = /《([^《》\n]{1,40})》/g;
 const normTitle = (s) => String(s || '').replace(/\s/g, '').toLowerCase();
@@ -484,6 +487,85 @@ function mentionedOf(c, list) {
       his = (rd.read || []).length ? `${me}分享给你看过第 ${chNos(chs, rd.read)} 章${rd.summary ? `，你写的全书梗概：${cut(rd.summary, 200)}` : last ? `，你最近写的梗概：${cut(rd.notes[last.id], 200)}` : ''}。` : '';
     }
     return [`《${b.title}》是${me}在手机阅读 App 里读的书：${where}。`, mine ? `${me}最近写的段评：${mine}` : '', his].filter(Boolean).join(' ');
+  });
+}
+
+// ── 音乐 App（评论区都是匿名的：名字按 anonOf 算，他也不知道哪条是你写的）──
+const SONG = { lyrics: 1500, chat: 300, list: 30, cm: 120, thread: 8 };
+const isCredit = (t) => /^(作词|词|作曲|曲|编曲|制作人?|演唱|原唱)\s*[:：]/.test(t);
+const wordsOf = (s) => (s.lines || []).map((l) => l.text).filter((t) => t && !isCredit(t)).join('\n');
+/** 这首歌：歌名、歌手、作词作曲、歌词 */
+function songText(s, max = SONG.lyrics) {
+  const credit = [s.lyricist && '作词 ' + s.lyricist, s.composer && '作曲 ' + s.composer].filter(Boolean).join('，');
+  const words = wordsOf(s);
+  return `《${s.title || '没有名字的歌'}》${s.artist ? ' — ' + s.artist : ''}${credit ? `（${credit}）` : ''}\n${words ? '歌词：\n' + cut(words, max) : '（没有歌词）'}`;
+}
+/** 评论区一行。self = 从谁的角度（他自己的标「（你）」） */
+function songCmLine(x, byId, self, n) {
+  const to = x.to && byId.get(x.to);
+  const nm = (w) => anonOf(w).name + (w === self ? '（你）' : '');
+  const likes = (x.likes || []).length;
+  return `${n ? n + '. ' : ''}${nm(x.who)}${to ? ' 回复 ' + nm(to.who) : ''}：${cut(x.text || '', SONG.cm)}${likes ? `（${likes} 赞）` : ''}`;
+}
+const recommended = (c, s) => D.msgs(c.id).some((r) => D.partsOf(r).some((p) => p.t === 'song' && p.song === s.id));
+/** 路人来评论 */
+export function buildSongCrowd(s, n) {
+  const all = D.songCmts(s.id).sort((a, z) => a.ts - z.ts), byId = new Map(all.map((x) => [x.id, x]));
+  return [{ role: 'user', content: T.songCrowdPrompt({ song: songText(s), n, others: all.slice(-12).map((x) => songCmLine(x, byId)).join('\n') }) }];
+}
+/** 他去评论区看看。nums[编号] = 评论 id */
+export function buildSongChar(c, s) {
+  const acc = accOf(c), me = meName(acc);
+  const all = D.songCmts(s.id).sort((a, z) => a.ts - z.ts), byId = new Map(all.map((x) => [x.id, x]));
+  const shown = all.slice(-SONG.list), nums = [null, ...shown.map((x) => x.id)];
+  const how = recommended(c, s) ? `${me}在聊天里把这首歌推荐给了你。` : `你和${me}聊天时提到过这首歌。`;
+  return { nums, msgs: [{ role: 'user', content: T.songCharPrompt({
+    c, me, how, song: songText(s), list: shown.map((x, i) => songCmLine(x, byId, c.id, i + 1)).join('\n'),
+    identityText: identityOf(c), memoryText: memoryOf(c, s.title, { mails: false, timeline: false }),
+  }) }] };
+}
+/** 有人回了他 / 在他评论过的歌下面写了一条 */
+export function buildSongReply(c, s, cm) {
+  const acc = accOf(c), me = meName(acc);
+  const all = D.songCmts(s.id).sort((a, z) => a.ts - z.ts), byId = new Map(all.map((x) => [x.id, x]));
+  const root = cm.to && byId.get(cm.to), toMe = !!root && root.who === c.id;
+  const rows = toMe ? [root, ...all.filter((x) => x.to === root.id && x.id !== cm.id)].slice(-SONG.thread) : all.filter((x) => x.who === c.id).slice(-4);
+  return [{ role: 'user', content: T.songReplyPrompt({
+    c, me, toMe, song: songText(s, 800), thread: rows.map((x) => songCmLine(x, byId, c.id)).join('\n') || '（没有）',
+    who: anonOf(cm.who).name, text: cut(cm.text || '', 300),
+    identityText: identityOf(c), memoryText: memoryOf(c, cm.text || '', { mails: false, timeline: false }),
+  }) }];
+}
+/** 路人回一句 */
+export function buildSongPassReply(s, cm, who) {
+  const all = D.songCmts(s.id).sort((a, z) => a.ts - z.ts), byId = new Map(all.map((x) => [x.id, x]));
+  const mine = all.filter((x) => x.who === who).slice(-3).map((x) => songCmLine(x, byId, who)).join('\n');
+  const toMe = !!cm.to && byId.get(cm.to)?.who === who;
+  return [{ role: 'user', content: T.songPassReplyPrompt({ name: anonOf(who).name, song: songText(s, 800), mine, toMe, who: anonOf(cm.who).name, text: cut(cm.text || '', 300) }) }];
+}
+/**
+ * 聊天时告诉他的歌（最多 3 首）：最近几句里用《歌名》提到的（歌单里有的），和最近 3 天他知道的 / 在评论区写过的。
+ * 歌词给一小段；他在评论区写过什么也告诉他（他知道自己的网名，不知道别人是谁）
+ */
+function songsOf(c, list) {
+  const all = D.songs();
+  if (!all.length) return [];
+  const me = meName(accOf(c)), since = Date.now() - 3 * 86400000;
+  const recent = list.filter((r) => r.role !== 'note').slice(-6).map((r) => D.partsOf(r).map((p) => [p.text, p.desc, p.title].filter(Boolean).join(' ')).join(' ')).join('\n');
+  const titles = new Set([...recent.matchAll(TITLE_RE)].map((m) => normTitle(m[1])));
+  const picked = all.map((s) => {
+    const mine = D.songCmts(s.id).filter((x) => x.who === c.id);
+    const last = Math.max(s.know?.[c.id] || 0, ...mine.map((x) => x.ts));
+    return { s, mine, hot: titles.has(normTitle(s.title)) ? Infinity : last > since ? last : 0 };
+  }).filter((x) => x.hot).sort((a, z) => z.hot - a.hot).slice(0, 3);
+  return picked.map(({ s, mine }) => {
+    const rec = recommended(c, s);
+    const his = mine.slice(-2).map((x) => `「${cut(x.text || '', 60)}」`).join('');
+    return [
+      `《${s.title}》${s.artist ? `（${s.artist}）` : ''}是${me}手机音乐 App 歌单里的歌${rec ? `，${me}推荐给你听过` : ''}。`,
+      his ? `你在它的评论区（匿名，网名「${anonOf(c.id).name}」）写过：${his}` : s.know?.[c.id] ? '你听过，还没在评论区写什么。' : '',
+      wordsOf(s) ? `歌词节选：${cut(wordsOf(s).replace(/\n/g, ' / '), SONG.chat)}` : '',
+    ].filter(Boolean).join(' ');
   });
 }
 

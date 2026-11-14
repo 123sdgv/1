@@ -1,0 +1,113 @@
+/* 音乐 App。播放页是深色的（封面糊成背景），别的页和整台手机一样黑白浅色 */
+
+/* 歌的封面：有图是图，没有是黑灰渐变 + 小音符（聊天卡片、歌单、播放页共用） */
+.sg-cv { position: relative; width: 44px; aspect-ratio: 1; flex: none; border-radius: 6px; background: linear-gradient(150deg, #5a5a5e, #1c1c1e) center / cover no-repeat; color: rgba(255,255,255,.55); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.sg-cv .ic { width: 42%; height: 42%; }
+.sg-cv.big { width: 100%; border-radius: 10px; box-shadow: 0 18px 40px rgba(0,0,0,.4); }
+.sg-cv.big .ic { width: 30%; height: 30%; stroke-width: 1.2; }
+.card.songc .sg-cv { width: 40px; border-radius: 5px; }
+.card.songc b { font-family: inherit; font-weight: 600; }
+
+/* 开着播放页：网页底色和底下那条系统空白都是深色 */
+@media (max-width: 619px) { body.in-app.app-dark:not(.locked), body.in-app.app-dark:not(.locked) #device { background: #121213; } }
+.win.dark { background: #121213; }
+.win.dark .home-bar i { background: rgba(255,255,255,.5); }
+
+/* ── 播放页 ── */
+.mu-player { background: #121213; color: #fff; overflow: hidden; }
+.mu-bg { position: absolute; inset: -40px; background: radial-gradient(ellipse at 50% 18%, #4a4a4e, #1d1d1f 62%, #121213) center / cover no-repeat; z-index: 0; }
+.mu-bg.img { filter: blur(46px) saturate(1.1) brightness(.55); transform: scale(1.2); }
+.mu-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.2) 55%, #121213 100%); }
+.mu-player .bar { background: none; -webkit-backdrop-filter: none; backdrop-filter: none; color: #fff; }
+.mu-player .bar::after { display: none; }
+.mu-player .ibtn:active { background: rgba(255,255,255,.1); }
+.mu-player .scroll { position: relative; z-index: 1; display: flex; flex-direction: column; overflow: hidden; padding: 0 0 calc(var(--bot) + 6px); }
+.mu-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px 30px 0; cursor: pointer; }
+.mu-cvbox { width: min(100%, 340px, 44vh); }
+.mu-two { width: 100%; margin-top: 22px; min-height: 52px; text-align: center; }
+.mu-two p { font-size: 14.5px; line-height: 26px; color: rgba(255,255,255,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color .3s; }
+.mu-two p.on { color: #fff; font-weight: 500; }
+.mu-lyr { display: none; width: 100%; flex: 1; min-height: 0; overflow-y: auto; padding: 30% 0 50%; -webkit-mask: linear-gradient(transparent, #000 14%, #000 82%, transparent); mask: linear-gradient(transparent, #000 14%, #000 82%, transparent); scrollbar-width: none; }
+.mu-lyr::-webkit-scrollbar { display: none; }
+.mu-ly { display: block; width: 100%; padding: 9px 0; text-align: left; font-size: 19px; line-height: 1.45; font-weight: 600; color: rgba(255,255,255,.36); transition: color .3s; word-break: break-word; }
+.mu-ly.cr { font-size: 14px; font-weight: 400; }
+.mu-ly.on { color: #fff; }
+.mu-none { padding-top: 40%; text-align: center; color: rgba(255,255,255,.4); }
+.mu-player.lyr .mu-cvbox, .mu-player.lyr .mu-two { display: none; }
+.mu-player.lyr .mu-lyr { display: block; }
+.mu-player.lyr .mu-stage { justify-content: flex-start; }
+
+.mu-info { flex: none; display: flex; align-items: center; gap: 8px; padding: 14px 18px 0 30px; }
+.mu-tt { flex: 1; min-width: 0; }
+.mu-ttl { display: block; font-size: 21px; font-weight: 650; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-art { display: block; margin-top: 2px; font-size: 14px; color: rgba(255,255,255,.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-acts { display: flex; align-items: center; flex: none; }
+.mu-act { width: 42px; color: #fff; position: relative; }
+.mu-act .ic { width: 24px; height: 24px; }
+.mu-act:disabled { opacity: .3; }
+.mu-act.on { color: #fff; }
+.mu-cmb .mu-n { position: absolute; left: 27px; top: 4px; font-size: 10px; font-weight: 600; line-height: 1; }
+.mu-prog { flex: none; padding: 18px 30px 0; touch-action: none; cursor: pointer; }
+.mu-track { position: relative; height: 3px; border-radius: 2px; background: rgba(255,255,255,.22); }
+.mu-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: rgba(255,255,255,.85); }
+.mu-knob { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.mu-prog.drag .mu-knob { transform: scale(1.5); }
+.mu-times { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: rgba(255,255,255,.5); font-variant-numeric: tabular-nums; }
+.mu-ctl { flex: none; display: flex; justify-content: center; padding: 12px 0 4px; }
+.mu-play { width: 64px; height: 64px; border-radius: 50%; background: #fff; color: #141414; display: flex; align-items: center; justify-content: center; transition: transform .15s; }
+.mu-play .ic { width: 28px; height: 28px; }
+.mu-play:active { transform: scale(.92); }
+.mu-play:disabled { opacity: .35; }
+@media (max-height: 700px) {
+  .mu-two { margin-top: 14px; }
+  .mu-info { padding-top: 8px; }
+  .mu-prog { padding-top: 12px; }
+  .mu-ctl { padding-top: 8px; }
+  .mu-play { width: 56px; height: 56px; }
+}
+
+/* ── 我的 + 歌单 ── */
+.mu-av { display: block; width: 36px; height: 36px; flex: none; border-radius: 9px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); background: #fff; }
+.mu-av svg { display: block; width: 100%; height: 100%; }
+.mu-av.big { width: 68px; height: 68px; border-radius: 16px; box-shadow: 0 0 0 1px var(--line); }
+.mu-av.xs { width: 26px; height: 26px; border-radius: 7px; }
+.mu-me { display: flex; align-items: center; gap: 14px; padding: 6px 22px 22px; }
+.mu-me b { font-size: 20px; font-weight: 600; }
+.mu-lh { display: flex; align-items: center; gap: 8px; padding: 0 10px 4px 22px; }
+.mu-lh b { font-size: 15px; font-weight: 600; }
+.mu-lh small { flex: 1; color: var(--ink-3); font-size: 12.5px; }
+.mu-rows { padding: 0 12px; }
+.mu-row { display: flex; align-items: center; gap: 4px; padding: 8px 4px 8px 10px; border-radius: 12px; background: #fff; margin-bottom: 6px; cursor: pointer; -webkit-touch-callout: none; }
+.mu-row.pressed { background: #EFEFEC; }
+.mu-row em { width: 26px; flex: none; font-style: normal; font-size: 14px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.mu-row.cur em { color: var(--ink); font-weight: 600; }
+.mu-rt { flex: 1; min-width: 0; }
+.mu-rt b { display: block; font-size: 15.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-rt small { display: block; font-size: 12.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-row .ibtn { width: 38px; color: var(--ink-2); }
+.mu-row .ibtn.on { color: var(--ink); }
+.mu-row .ibtn .ic { width: 20px; height: 20px; }
+.mu-search .bar { grid-template-columns: 48px 1fr 12px; }
+.mu-sr { width: 100%; }
+.mu-search .mu-rows { padding-top: 10px; }
+
+/* ── 加歌 / 改歌 ── */
+.mu-ecv { position: relative; width: 132px; margin: 8px auto 18px; }
+.mu-ecv-b { display: block; width: 100%; }
+.mu-ecv-b .sg-cv { width: 100%; border-radius: 10px; }
+.mu-ecv-x { position: absolute; right: -8px; top: -8px; width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: #fff; display: flex; align-items: center; justify-content: center; }
+.mu-ecv-x .ic { width: 14px; height: 14px; }
+
+/* ── 评论区 ── */
+.sheet.mu-cms { height: 74%; }
+body.kb .sheet.mu-cms { height: 94%; }
+.mu-cms .sh-body { padding-top: 0; }
+.mu-cm { align-items: flex-start; }
+.mu-cm.re { padding-left: 66px; }
+.mu-cm .mu-av { margin-top: 2px; }
+.mu-votes { display: flex; flex: none; gap: 2px; margin-top: 16px; }
+.mu-vote { display: flex; align-items: center; gap: 2px; min-width: 30px; height: 28px; padding: 0 4px; color: var(--ink-3); }
+.mu-vote .ic { width: 17px; height: 17px; }
+.mu-vote small { font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.mu-vote.on { color: var(--ink); }
+.mu-vote.on .ic path { fill: currentColor; fill-opacity: .14; }

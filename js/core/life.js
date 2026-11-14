@@ -9,6 +9,7 @@ import { ymd, weekOf, monthEnd } from './time.js';
 import { getWeather } from './weather.js';
 import { mailTick } from './mail.js';
 import { readTick } from './read.js';
+import { musicTick } from './music.js';
 
 const MIN = 60000, HOUR = 60 * MIN;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -196,6 +197,7 @@ export function tick() {
       const list = D.chars();
       await mailTick({ inQuiet });
       await readTick();
+      await musicTick();
       for (const c of list) { const L = D.lifeOf(c); if (L.diary && canTry('d' + c.id) && diaryDue(c, L)) { await writeDiary(c).catch(failed('d' + c.id, '日记')); break; } }
       // 时间线：一次只整理一件（一段周记或月记）
       for (const c of list) { if (canTry('t' + c.id) && timelineTodo(c)) { await writeTimeline(c).catch(failed('t' + c.id, '时间线')); break; } }

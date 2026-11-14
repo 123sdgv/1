@@ -103,6 +103,18 @@ export const ICONS = {
       <circle cx="73" cy="47" r="4.6" fill="#fff" fill-opacity=".9"/>
       <path d="M40 78l12-14 9 9 7-6 16 11z" fill="#fff" fill-opacity=".75"/></g>`),
 
+  // 音乐：一张黑胶从白色唱片套里滑出来一半
+  music: () => svg('music', `
+    <g filter="url(#sh-music)"><circle cx="70" cy="58" r="32" fill="${INK}"/></g>
+    <circle cx="70" cy="58" r="25" fill="none" stroke="#fff" stroke-opacity=".1" stroke-width="1.4"/>
+    <circle cx="70" cy="58" r="19" fill="none" stroke="#fff" stroke-opacity=".1" stroke-width="1.4"/>
+    <path d="M52 37a28 28 0 0 1 22-7" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="70" cy="58" r="9" fill="#fff"/><circle cx="70" cy="58" r="2.2" fill="${INK}"/>
+    <rect x="18" y="26" width="46" height="64" rx="3" fill="#fff" stroke="${INK}" stroke-width="4.4" stroke-linejoin="round"/>
+    <path d="M27 76h20M27 82h12" stroke="#c9cacf" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M33 41v18.5" stroke="${INK}" stroke-width="3.6" stroke-linecap="round"/><path d="M33 41l11-2.6v6" fill="none" stroke="${INK}" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="29.6" cy="60" r="4.2" fill="${INK}"/>`),
+
   weather: () => svg('weather', `
     <g filter="url(#sh-weather)"><circle cx="48" cy="48" r="17" fill="${INK}"/></g>
     <g stroke="${INK}" stroke-width="4.4" stroke-linecap="round"><path d="M48 18v6M48 72v6M18 48h6M24.8 24.8l4.2 4.2M71.2 24.8 67 29M24.8 71.2 29 67"/></g>

@@ -9,7 +9,7 @@ import * as D from '../../core/data.js';
 import { sep, md } from '../../core/time.js';
 import { fmtYuan, makeVoice, quoteText } from '../../core/parse.js';
 import * as CS from '../../core/chat.js';
-import { photoTile, imgTile, albumTile, viewPhoto, fwdCard, bookCover, pickPhotoWithCaption } from '../shared.js';
+import { photoTile, imgTile, albumTile, viewPhoto, fwdCard, bookCover, songCover, pickPhotoWithCaption } from '../shared.js';
 import * as G from '../../core/game.js';
 import { editChar } from './char.js';
 import { stickerSheet } from './stickers.js';
@@ -311,6 +311,13 @@ export function openChat(ctx, cid, { at = null } = {}) {
       return h('button', { class: 'card bookc', onclick: () => (ok ? openApp('read', { book: b.id, ch: p.ch }) : toast('这一章已经删掉了')) },
         h('div', { class: 'cd-top' }, bookCover(p.title, '', { mini: true }), h('div', {}, h('b', { text: `《${b?.title || p.title}》` }), h('small', { text: `第 ${p.no} 章${p.chTitle ? ' · ' + p.chTitle : ''}` }))),
         h('div', { class: 'cd-foot', text: '分享' }));
+    }
+    // 你在音乐 App 里推荐给他的歌：点了去那首歌的评论区
+    if (p.t === 'song') {
+      const sg = D.songById(p.song);
+      return h('button', { class: 'card bookc songc', onclick: () => (sg ? openApp('music', { song: sg.id, comments: true }) : toast('这首歌已经删掉了')) },
+        h('div', { class: 'cd-top' }, songCover(sg || { id: '' }), h('div', {}, h('b', { text: sg?.title || p.title }), h('small', { text: sg?.artist ?? p.artist ?? '' }))),
+        h('div', { class: 'cd-foot', text: '音乐' }));
     }
     if (p.t === 'book') {
       const b = D.bookById(p.book), n = b ? D.chapters(b.id).length : 0;

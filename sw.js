@@ -3,7 +3,7 @@
 // 要是还在锁屏上（刚打开 15 秒内），马上换、整页重新载入一下；已经在用了就等下次打开。
 // 下面 VERSION 和 FILES 是 tests/stamp.py 按文件内容算出来写的，推之前跑一下（测试脚本也会自动跑），别手改。
 // <stamp>
-const VERSION = 'bdf4f6c3bb';
+const VERSION = 'f33139b006';
 const FILES = [
   'index.html',
   'manifest.webmanifest',
@@ -13,6 +13,7 @@ const FILES = [
   'assets/icon.svg',
   'css/apps.css',
   'css/base.css',
+  'css/music.css',
   'css/phone.css',
   'css/read.css',
   'css/social.css',
@@ -24,6 +25,7 @@ const FILES = [
   'js/apps/game/index.js',
   'js/apps/mail/index.js',
   'js/apps/memo/index.js',
+  'js/apps/music/index.js',
   'js/apps/offline/index.js',
   'js/apps/read/index.js',
   'js/apps/settings/index.js',
@@ -44,6 +46,7 @@ const FILES = [
   'js/core/game.js',
   'js/core/life.js',
   'js/core/mail.js',
+  'js/core/music.js',
   'js/core/parse.js',
   'js/core/prompt.js',
   'js/core/read.js',

@@ -59,6 +59,12 @@ export function bookCover(title, cls = '', { mini = false, kids = null } = {}) {
     mini ? null : h('span', { class: 'bk-cv-t', text: title }), kids);
 }
 
+/** 歌的封面：传了图就是图，没传是黑灰渐变 + 一个小音符 */
+export function songCover(song, cls = '') {
+  const src = song && D.file('song.' + song.id);
+  return h('div', { class: 'sg-cv ' + cls, style: src ? { backgroundImage: `url(${src})` } : null, html: src ? '' : icon('note8') });
+}
+
 /** 选一个角色（当前账号） */
 export function pickChar(title, onPick, filter = () => true) {
   const list = D.chars().filter(filter);

@@ -69,7 +69,7 @@ export const reading = (lines) => (lines.length ? sec('你在读的书', list(li
 export const mentioned = (lines) => (lines.length ? sec('聊天里提到的书', list(lines)) : '');
 
 // ── 手机聊天 ──
-export function chatSystem({ c, me, identityText, memoryText, stickers, canMail, canSearch, canBook = false }) {
+export function chatSystem({ c, me, identityText, memoryText, stickers, canMail, canSearch, canBook = false, canSong = false }) {
   return join(
     `你在扮演「${c.name}」，正在用手机上的聊天软件和${me}聊天。这是线上聊天，你们不在一起。`,
     identityText,
@@ -89,7 +89,8 @@ ${stickers.length ? `  [表情包 名字] —— 发一个表情包。只能用�
 ${canMail ? `  [邮件 主题] 然后另起几行写正文，最后单独一行写 [/邮件] —— 给${me}的邮箱发一封邮件（不会出现在聊天里），偶尔用，适合写长一点、正式一点的话
 ` : ''}${canSearch ? `  [搜索 关键词] —— 想知道最近发生的事、实时的消息，或者拿不准的事实，就只回这一行、别的都先别写；系统会把搜到的东西给你，你看完再回${me}
 ` : ''}- ${me}发来的 [图片] 就是一张真照片，按看到这张照片来回应；[语音] 就是${me}说话的声音；[聊天记录] 是${me}转发给你的一段别人的聊天。（撤回了一条消息）是${me}发了一条又撤回了，你没来得及看到内容。${canBook ? `
-- ${me}会在手机上的阅读 App 里把书的章节分享给你：[分享] 《书名》第几章 就是${me}刚分享给你的那一章，你会在阅读 App 里读它、在段落下面写段评。你读过哪些、写了什么，参考里会告诉你；没读过的部分你不知道。（以前${me}发来的 [书] 《书名》 是邀请你一起读那本书。）` : ''}
+- ${me}会在手机上的阅读 App 里把书的章节分享给你：[分享] 《书名》第几章 就是${me}刚分享给你的那一章，你会在阅读 App 里读它、在段落下面写段评。你读过哪些、写了什么，参考里会告诉你；没读过的部分你不知道。（以前${me}发来的 [书] 《书名》 是邀请你一起读那本书。）` : ''}${canSong ? `
+- [推荐歌] 《歌名》 是${me}在手机上的音乐 App 里推荐给你的歌，你会去听、去评论区看看；你听过哪些、在评论区写了什么，参考里会告诉你。` : ''}
 - 不要写时间，不要写名字前缀，不要用其他格式。${stickers.length ? '' : '现在没有表情包可以发。'}`),
   );
 }
@@ -322,6 +323,62 @@ export function bookSummaryPrompt({ c, title, chTotal, read, done, identityText,
 {"summary": "全书梗概"}`,
   );
 }
+
+// ── 音乐 App：一首歌下面的评论区（大家都匿名）──
+const SONG_RULE = `评论区是公开的、匿名的：每个人只显示一个随机的英文名，谁也不知道谁是谁。像真的音乐软件评论区那样说话：短，口语，有的走心、有的玩梗、有的只说一句；不要写真名，不要说自己是 AI。`;
+/** 路人：编几个陌生人来评论 */
+export function songCrowdPrompt({ song, n, others }) {
+  return join(
+    `你要扮演 ${n} 个在音乐软件评论区随手留言的陌生人，他们互不认识，性格、年纪、听歌的理由都不一样。`,
+    sec('这首歌', song),
+    others ? sec('下面已经有的评论（别重复他们说过的）', others) : '',
+    SONG_RULE,
+    `写 ${n} 个人的评论，一个人 1～2 条，一共不超过 ${n * 2} 条。可以有人回复这次前面写的某一条（reply 写那条在这次里的序号，从 1 数；不是回复就写 0）。用中文。
+只输出一个 JSON，不要任何别的文字：
+{"comments": [{"who": 第几个人（1～${n}）, "text": "评论", "reply": 0}]}`,
+  );
+}
+/** 他去评论区：写自己的、回别人、点赞 */
+export function songCharPrompt({ c, me, identityText, memoryText, how, song, list }) {
+  return join(
+    `你是「${c.name}」。${how}你打开了手机上的音乐 App，听了这首歌，看了看下面的评论区。`,
+    identityText,
+    memoryText,
+    sec('这首歌', song),
+    sec('评论区（编号）', list || '（还没有人评论）'),
+    SONG_RULE + `你也不知道哪一条是${me}写的。`,
+    `你会怎么做？可以写 1～2 条自己的评论（听这首歌的感受，可以跟你的生活、你的心事有关），可以回复几条（按编号，最多 3 条），可以给喜欢的点赞（按编号）。都不想做的就留空。别回复你自己写的。
+只输出一个 JSON，不要任何别的文字：
+{"comments": ["你的评论"], "replies": [{"to": 编号, "text": "回复"}], "likes": [编号]}`,
+  );
+}
+/** 有人回了他 / 在他评论过的歌下面写了一条 */
+export function songReplyPrompt({ c, me, identityText, memoryText, song, thread, who, text, toMe }) {
+  return join(
+    `你是「${c.name}」。你在手机上的音乐 App 里听过这首歌，还在评论区留过言。`,
+    identityText,
+    memoryText,
+    sec('这首歌', song),
+    sec(toMe ? '你那条评论和下面的回复' : '评论区里你写过的', thread),
+    SONG_RULE + `你也不知道哪一条是${me}写的。`,
+    `${toMe ? `${who} 刚刚回复了你` : `${who} 刚刚在这首歌下面写了一条`}：「${text}」。你要回一句吗？要不要点个赞？话已经说到头了、只是应一声的，不回也很自然。
+只输出一个 JSON，不要任何别的文字：
+{"reply": "回复内容，一两句；不想回就留空字符串", "like": true 或 false}`,
+  );
+}
+/** 路人回一句 */
+export function songPassReplyPrompt({ name, song, mine, who, text, toMe }) {
+  return join(
+    `你是音乐软件评论区里的一个普通网友，网名「${name}」。`,
+    sec('这首歌', song),
+    mine ? sec('你在这首歌下面写过', mine) : '',
+    SONG_RULE,
+    `${who} 刚刚${toMe ? '回复了你' : '在这首歌下面写了一条'}：「${text}」。你要回一句吗？不想回就留空。用中文。
+只输出一个 JSON，不要任何别的文字：
+{"reply": "回复内容，一句；不想回就留空字符串"}`,
+  );
+}
+export const songs = (lines) => (lines.length ? sec('音乐 App 里的歌', list(lines)) : '');
 
 // ── 塔罗（塔罗 App：你自己抽，模型用中性的塔罗师口吻解。规矩照 Notion 资料库里的 tarot-skill）──
 export function tarotPrompt({ q, spread, time, cards, stats }) {
