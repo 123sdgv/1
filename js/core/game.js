@@ -172,6 +172,19 @@ export async function turn(id) {
   if (g4 && !ctrl.signal.aborted && g4.log.some((e) => e.who === 'me' && e.ts > t0)) setTimeout(() => turn(id), 600);
 }
 export const stop = (id) => running.get(id)?.abort();
+/** 改一句、删一句（你的、他的都行；画、汤面不在这里改） */
+export function editLine(id, eid, text) {
+  const g = fresh(id), e = g?.log.find((x) => x.id === eid);
+  if (!e) return;
+  e.text = text;
+  D.saveGame(g);
+}
+export function removeLine(id, eid) {
+  const g = fresh(id);
+  if (!g) return;
+  g.log = g.log.filter((x) => x.id !== eid);
+  D.saveGame(g);
+}
 
 // ── 一起猜：看不见的出题人 ──
 async function judgeLine(id, who, text) {

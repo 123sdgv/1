@@ -78,6 +78,19 @@
 .dy-inner .p { font: italic 14.5px/1.9 var(--serif); color: #3d3d3a; margin: 0; }
 .dy-keys { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 12px; }
 .dy-keys span { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #EEECE5; color: var(--ink-2); }
+/* 日记本：一页一篇，像翻书（书脊在左边）。日期在右下角，点了选一天 */
+.dy-bkpg .scroll { overflow: hidden; display: flex; flex-direction: column; padding: 12px 14px calc(var(--bot) + 10px); }
+.dy-bk { position: relative; flex: 1; min-height: 0; perspective: 2600px; perspective-origin: 0 50%; touch-action: pan-y; }
+.dy-pg { position: absolute; inset: 0; display: flex; flex-direction: column; background: #FDFCF8; border-radius: 3px 10px 10px 3px; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.05); transform-origin: left center; -webkit-backface-visibility: hidden; backface-visibility: hidden; overflow: hidden; touch-action: pan-y; }
+.dy-pg::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 16px; background: linear-gradient(90deg, rgba(0,0,0,.07), transparent); pointer-events: none; }
+.dy-pg.turning { z-index: 2; will-change: transform; box-shadow: 0 1px 3px rgba(0,0,0,.1), 10px 0 30px rgba(0,0,0,.14); }
+.dy-pg-s { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 22px 12px 28px; touch-action: pan-y; -webkit-touch-callout: none; }
+.dy-pg-f { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 18px 12px 28px; }
+.dy-pg .dy-book { margin: 0; max-width: 52%; }
+.dy-date { position: relative; flex: none; padding: 6px 0 6px 8px; font: 14px var(--serif); color: var(--ink-2); cursor: pointer; }
+.dy-date-in { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; -webkit-appearance: none; appearance: none; }
+.dy-shade { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(90deg, rgba(0,0,0,.32), rgba(0,0,0,.06)); border-radius: inherit; }
+.dy-bk > .empty { padding-top: 80px; }
 
 /* 备忘录 */
 .mm { background: #F6F6F3; }

@@ -168,7 +168,7 @@ export async function summarize(bid, cid) {
   summing.add(bid + '|' + cid);
   D.emit('bookrd', bid);
   try {
-    const j = parseJSON(await ask(c, C.buildBookSummary(c, b), 2500));
+    const j = parseJSON(await ask(c, C.buildBookSummary(c, b), 6000));
     const text = String(j?.summary || '').trim();
     if (!text) throw new Error('这次没写成');
     const rd = D.readers(bid), r = rd[cid];
@@ -236,7 +236,7 @@ async function readJob(b, cid) {
   setNow({ book: b.id, who: cid, ch: ch.id }, b.id);
   try {
     const { msgs, nums } = C.buildReadChapter(c, b, nx.idx, k);
-    const j = parseJSON(await ask(c, msgs, 2000));
+    const j = parseJSON(await ask(c, msgs, 6000));
     if (!j || (typeof j.note !== 'string' && !Array.isArray(j.comments))) throw new Error('这次没读成');
     // 读的时候书、这章、他可能被删了
     const fresh = D.chapters(b.id).find((x) => x.id === ch.id);
@@ -285,7 +285,7 @@ async function replyJob(job) {
   const b = D.bookById(job.book), c = D.charById(job.who);
   const cm = b && D.bookCmts(b.id).find((x) => x.id === job.cm);
   if (!b || !c || !cm) return;
-  const j = parseJSON(await ask(c, C.buildReadReply(c, b, cm, job.kind), 400)) || {};
+  const j = parseJSON(await ask(c, C.buildReadReply(c, b, cm, job.kind), 1500)) || {};
   const text = String(j.reply || '').trim();
   const all = D.bookCmts(b.id);
   if (!text || !all.some((x) => x.id === cm.id)) return;
@@ -301,7 +301,7 @@ async function reviewJob(b, cid) {
   if (!c) return;
   setNow({ book: b.id, who: cid, ch: 'review' }, b.id);
   try {
-    const j = parseJSON(await ask(c, C.buildReadReview(c, b), 2200));
+    const j = parseJSON(await ask(c, C.buildReadReview(c, b), 6000));
     const write = j && j.write !== false && !!String(j.diary || '').trim();
     if (!j || (j.write !== false && !write)) throw new Error('阅读日记没写成');
     const rdAll = D.readers(b.id);

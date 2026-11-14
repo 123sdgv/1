@@ -80,7 +80,7 @@ export async function chat(messages, { onDelta, onAlive, onEnd, signal, temperat
       const raw = await res.text();
       let text = '';
       try { const j = JSON.parse(raw); text = j.choices?.[0]?.message?.content ?? j.choices?.[0]?.text ?? ''; onEnd && onEnd(j.choices?.[0]?.finish_reason || ''); }
-      catch { text = sseJoin(raw); }
+      catch { text = sseJoin(raw, onEnd); }
       all = text;
       onDelta && onDelta(text, text);
       return text;
@@ -123,13 +123,14 @@ export async function chat(messages, { onDelta, onAlive, onEnd, signal, temperat
 }
 
 // 有些中转不管 stream 设没设都回 SSE 文本
-function sseJoin(raw) {
-  let out = '';
+function sseJoin(raw, onEnd) {
+  let out = '', why = '';
   for (const line of raw.split('\n')) {
     const t = line.trim();
     if (!t.startsWith('data:')) continue;
-    try { const j = JSON.parse(t.slice(5)); out += j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content ?? ''; } catch {}
+    try { const j = JSON.parse(t.slice(5)); out += j.choices?.[0]?.delta?.content ?? j.choices?.[0]?.message?.content ?? ''; why = j.choices?.[0]?.finish_reason || why; } catch {}
   }
+  onEnd && onEnd(why);
   return out;
 }
 

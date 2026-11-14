@@ -125,6 +125,23 @@ export function retryChat(id) {
   D.saveTarot({ ...rec, chat: log });
   if (log.at(-1)?.who === 'me') talk(id);
 }
+/** 追问里改一条、删一条（你的、他的都行） */
+export function editChat(id, mid, text) {
+  const rec = recOf(id);
+  if (!rec) return;
+  D.saveTarot({ ...rec, chat: (rec.chat || []).map((m) => (m.id === mid ? { ...m, text } : m)) });
+  D.emit('tarotChat', id);
+}
+export function removeChat(id, mid) {
+  const rec = recOf(id);
+  if (!rec) return;
+  const i = (rec.chat || []).filter((m) => !m.err).findIndex((m) => m.id === mid);
+  // 他正在回：删的在他那条前面，他那条的位置往前挪一格
+  const job = talks.get(id);
+  if (job && i >= 0 && i < job.at) job.at--;
+  D.saveTarot({ ...rec, chat: (rec.chat || []).filter((m) => m.id !== mid) });
+  D.emit('tarotChat', id);
+}
 /** 解牌重来 / 删掉时：正在回的直接扔掉，不留东西 */
 export function dropChat(id) {
   const j = talks.get(id);

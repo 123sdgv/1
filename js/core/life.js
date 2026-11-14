@@ -3,7 +3,7 @@
 import * as D from './data.js';
 import { chat, queue } from './api.js';
 import * as C from './context.js';
-import { parseJSON } from './parse.js';
+import { parseJSON, stripThink } from './parse.js';
 import { reply as charReply } from './chat.js';
 import { ymd, weekOf, monthEnd } from './time.js';
 import { getWeather } from './weather.js';
@@ -14,7 +14,18 @@ import { musicTick } from './music.js';
 const MIN = 60000, HOUR = 60 * MIN;
 const rand = (a, b) => a + Math.random() * (b - a);
 // 后台的事也按这个角色自己的温度来
-const ask = (msgs, max = 900, c = null) => chat(msgs, { stream: false, max_tokens: max, temperature: c ? D.genOf(c).temperature : 0.9 });
+// Token 上限要给够：推理模型（比如 DeepSeek 的思考模式）先想的那段也算在里面，给少了还没开始写就用完了
+const ask = (msgs, max = 900, c = null, onEnd) => chat(msgs, { stream: false, max_tokens: max, temperature: c ? D.genOf(c).temperature : 0.9, onEnd });
+/** 要 JSON 的：没拿到就说清楚是哪种没成（截断 / 没回字 / 格式不对） */
+async function askJSON(msgs, max, c, what) {
+  let why = '';
+  const text = await ask(msgs, max, c, (r) => { why = r; });
+  const j = parseJSON(text);
+  if (j) return { j, why };
+  const bare = stripThink(text).trim();
+  throw new Error(`这次${what}没写成：${!bare ? (why === 'length' ? 'Token 上限不够，还没写就用完了' : '模型没回字') : why === 'length' ? '写太长被截断了' : '回的不是要的格式'}，过会儿再试`);
+}
+const strs = (x, n) => (Array.isArray(x) ? x : []).map(String).map((s) => s.trim()).filter(Boolean).slice(0, n);
 
 // ── 动态：安排谁什么时候来点赞评论 ──
 /** 你发了动态：这个账号的角色大多会来看看 */
@@ -42,7 +53,7 @@ async function runJob(m, job) {
   const c = D.charById(job.who);
   if (!c) return;
   if (job.kind === 'react') {
-    const j = parseJSON(await ask(C.buildReact(c, m), 400, c)) || {};
+    const j = parseJSON(await ask(C.buildReact(c, m), 1500, c)) || {};
     const fresh = D.moments().find((x) => x.id === m.id);
     if (!fresh) return;
     if (j.like && !fresh.likes.includes(c.id)) fresh.likes.push(c.id);
@@ -58,7 +69,7 @@ async function runJob(m, job) {
     const fresh = D.moments().find((x) => x.id === m.id);
     const cm = fresh?.comments.find((x) => x.id === job.cid);
     if (!cm) return;
-    const j = parseJSON(await ask(C.buildReply(c, fresh, cm), 400, c)) || {};
+    const j = parseJSON(await ask(C.buildReply(c, fresh, cm), 1500, c)) || {};
     if (j.reply && String(j.reply).trim()) {
       fresh.comments.push({ id: D.uid(), who: c.id, to: cm.who, text: String(j.reply).trim(), ts: Date.now() });
       if (cm.who === 'me') D.emit('notify', { moment: fresh.id, text: `${D.nameOf(c)}回复了你` });
@@ -103,14 +114,14 @@ export async function writeDiary(c, { force = false } = {}) {
   const since = ds.length ? ds[ds.length - 1].upto || ds[ds.length - 1].ts : 0;
   const log = C.diaryLog(c, since);
   if (!log.count) { if (force) throw new Error('上一篇日记之后还没发生什么'); return null; }
-  const j = parseJSON(await ask(C.buildDiary(c, log), 2000, c));
-  if (!j || !j.diary) throw new Error('这次日记没写成，过会儿再试');
-  const d = { id: D.uid(), date: /^\d{4}-\d{2}-\d{2}$/.test(j.date || '') ? j.date : ymd(log.last), ts: Date.now(), upto: log.last, text: String(j.diary).trim(), inner: String(j.inner || '').trim(), keys: (j.keywords || []).map(String).filter(Boolean).slice(0, 12) };
+  const { j, why } = await askJSON(C.buildDiary(c, log), Math.max(7000, D.genOf(c).maxTokens || 0), c, '日记');
+  if (!String(j.diary || '').trim()) throw new Error(`这次日记没写成：${why === 'length' ? '写太长被截断了' : '回的不是要的格式'}，过会儿再试`);
+  const d = { id: D.uid(), date: /^\d{4}-\d{2}-\d{2}$/.test(j.date || '') ? j.date : ymd(log.last), ts: Date.now(), upto: log.last, text: String(j.diary).trim(), inner: String(j.inner || '').trim(), keys: strs(j.keywords, 12) };
   D.setDiaries(c.id, [...D.diaries(c.id), d]);
   // 备忘录：删掉不对的、加上新的（用户手动加的也在里面，一样可能被删，所以只删模型点名的编号）
   const memo = D.memos(c.id);
-  const drop = new Set((j.memo_remove || []).map((n) => memo[Number(n) - 1]?.id).filter(Boolean));
-  const add = (j.memo_add || []).map(String).map((s) => s.trim()).filter(Boolean).filter((s) => !memo.some((m) => m.text === s));
+  const drop = new Set((Array.isArray(j.memo_remove) ? j.memo_remove : []).map((n) => memo[Number(n) - 1]?.id).filter(Boolean));
+  const add = strs(j.memo_add, 30).filter((s) => !memo.some((m) => m.text === s));
   D.setMemos(c.id, [...memo.filter((m) => !drop.has(m.id)), ...add.map((text) => ({ id: D.uid(), text, ts: Date.now(), auto: true }))]);
   D.emit('notify', { diary: c.id, text: `${D.nameOf(c)}写了一篇日记` });
   return d;
@@ -161,18 +172,18 @@ export function timelineTodo(c, { now = false } = {}) {
 export async function writeTimeline(c, opt) {
   const todo = timelineTodo(c, opt);
   if (!todo) return null;
-  const j = parseJSON(await ask(todo.kind === 'week' ? C.buildWeek(c, todo.from, todo.to, todo.diaries) : C.buildMonth(c, todo.ym, todo.weeks), 1200, c));
+  const { j } = await askJSON(todo.kind === 'week' ? C.buildWeek(c, todo.from, todo.to, todo.diaries) : C.buildMonth(c, todo.ym, todo.weeks), 4000, c, todo.kind === 'week' ? '周记' : '月记');
   const text = String(j?.summary || '').trim();
-  if (!text) throw new Error('这次没整理成，过会儿再试');
+  if (!text) throw new Error('这次没整理成：回的不是要的格式，过会儿再试');
   const from = todo.kind === 'week' ? todo.from : todo.ym + '-01', to = todo.kind === 'week' ? todo.to : monthEnd(todo.ym);
-  const item = { id: D.uid(), kind: todo.kind, from, to, text, keys: (j.keywords || []).map(String).filter(Boolean).slice(0, 10), ts: Date.now(), last: todo.last };
+  const item = { id: D.uid(), kind: todo.kind, from, to, text, keys: strs(j.keywords, 10), ts: Date.now(), last: todo.last };
   D.setTimeline(c.id, [...D.timeline(c.id).filter((t) => !(t.kind === item.kind && t.from === item.from)), item]);
   return item;
 }
 
 // ── 角色发动态 ──
 export async function charPost(c) {
-  const j = parseJSON(await ask(C.buildPost(c), 600, c));
+  const j = parseJSON(await ask(C.buildPost(c), 2000, c));
   if (!j || !String(j.text || '').trim()) return null;
   const m = D.saveMoment({ id: D.uid(), acc: c.acc, who: c.id, text: String(j.text).trim(), photos: (j.photos || []).map(String).filter(Boolean).slice(0, 9), ts: Date.now(), likes: [], comments: [], jobs: [] });
   for (const p of m.photos) D.addPhoto({ acc: c.acc, desc: p, who: c.id });

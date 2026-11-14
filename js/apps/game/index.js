@@ -2,7 +2,7 @@
 // 一局在这里自己的页面里玩：上面是画 / 汤面，下面是你们说的话，最底下输入框。不进聊天；
 // 玩过的他都知道（聊天、写日记时，见 context.js 的 gameLine）。逻辑在 core/game.js。
 // 主页面只有两张卡；右上角 ☰ = 玩过的（按游戏分组），点了接着看 / 接着玩，左滑 × 删。按身份分开。
-import { h, Stack, page, icon, btnIc, sheet, swipeRow, avatar, autosize, confirm } from '../../core/ui.js';
+import { h, Stack, page, icon, btnIc, sheet, swipeRow, avatar, autosize, confirm, toast, longPress, popbar, inlineEdit, inlineEditing } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import * as G from '../../core/game.js';
 import { GAME_NAME } from '../../core/prompt.js';
@@ -199,6 +199,7 @@ export function mount(body, { close }) {
 
     // ── 下面：你们说的话。出题人 / 结果是一行小字；没回上的点了重试 ──
     function drawLog(g) {
+      if (inlineEditing() && list.querySelector('.ie-on')) return; // 正在改一句：改完再画
       const c = D.charById(g.char), me = D.curAccount();
       const nearBottom = p.scroll.scrollHeight - p.scroll.scrollTop - p.scroll.clientHeight < 80;
       list.innerHTML = '';
@@ -208,6 +209,11 @@ export function mount(body, { close }) {
         if (e.who === 'host' || e.who === 'sys') { list.append(h('div', { class: 'ch-note', text: e.text })); continue; }
         if (e.t === 'draw' || e.t === 'soup' || !e.text) continue; // 画、汤面在上面
         const bub = h('div', { class: 'bub' }, e.t === 'ask' ? h('em', { class: 'ask-t', text: '问' }) : null, e.text);
+        // 长按：改（就在气泡里改）、删。你的、他的都行
+        longPress(bub, (ev) => { if (!inlineEditing()) popbar(bub, [
+          ['edit', () => inlineEdit(bub, e.text, { save: (v) => { if (!v) { toast('不能是空的'); return false; } if (v !== e.text) G.editLine(id, e.id, v); }, done: () => draw() }), '编辑'],
+          ['trash', () => G.removeLine(id, e.id), '删除'],
+        ], { x: ev.clientX, y: ev.clientY }); });
         const col = h('div', { class: 'bcol' }, bub);
         list.append(h('div', { class: 'rec ' + (e.who === 'me' ? 'me' : 'them') }, h('div', { class: 'ln' }, e.who === 'them' ? av('them') : null, col, e.who === 'me' ? av('me') : null)));
       }

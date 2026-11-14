@@ -1,7 +1,7 @@
 // 塔罗：你自己抽，模型用中性的塔罗师口吻解（core/tarot.js；提示词在 prompt.js 的 tarotPrompt）。
 // 列表（抽过的，新的在上面，左滑 × 删）→ ＋ 写问题、挑牌阵、抽牌 → 洗牌、发牌（背面朝上）→ 自己一张一张翻开（也能点着先翻）→ 都翻开了就开始解。
 // 翻开的牌点一下看大图。解好的那段长按 → 黑条：重试、删除（只删解牌和追问）、聊天（这一局的追问）。按身份分开。
-import { h, Stack, page, btnIc, icon, group, sheet, swipeRow, autosize, longPress, popbar, confirm } from '../../core/ui.js';
+import { h, Stack, page, btnIc, icon, group, sheet, swipeRow, autosize, longPress, popbar, confirm, toast, inlineEdit, inlineEditing } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import * as TA from '../../core/tarot.js';
 import { md, hm } from '../../core/time.js';
@@ -235,8 +235,17 @@ export function mount(body, { close }) {
       sendBtn.innerHTML = icon(stop ? 'stop' : 'send');
       sendBtn.setAttribute('aria-label', stop ? '停下' : '发送');
     }
-    const bubble = (who, text) => h('div', { class: 'rec ' + who }, h('div', { class: 'ln' }, h('div', { class: 'bcol' }, h('div', { class: 'bub' }, ...lines(text)))));
+    const bubble = (who, text, m = null) => {
+      const bub = h('div', { class: 'bub' }, ...lines(text));
+      // 长按：改（就在气泡里改）、删。你的、他的都行
+      if (m) longPress(bub, (e) => { if (!inlineEditing()) popbar(bub, [
+        ['edit', () => inlineEdit(bub, m.text, { save: (v) => { if (!v) { toast('不能是空的'); return false; } if (v !== m.text) TA.editChat(id, m.id, v); }, done: () => draw() }), '编辑'],
+        ['trash', () => TA.removeChat(id, m.id), '删除'],
+      ], { x: e.clientX, y: e.clientY }); });
+      return h('div', { class: 'rec ' + who }, h('div', { class: 'ln' }, h('div', { class: 'bcol' }, bub)));
+    };
     function draw() {
+      if (inlineEditing() && p.el.querySelector('.ie-on')) return; // 正在改一条：改完再画
       const rec = D.tarots().find((t) => t.id === id);
       if (!rec) { if (stack.top?.el === p.el) stack.pop(); return; }
       const nearBottom = p.scroll.scrollHeight - p.scroll.scrollTop - p.scroll.clientHeight < 80;
@@ -248,7 +257,7 @@ export function mount(body, { close }) {
       for (const m of log) {
         if (liveEl && !m.err && k === live.at) list.append(liveEl);
         if (m.err) { list.append(h('button', { class: 'ch-err', text: `${m.text}　点这里重试`, onclick: () => TA.retryChat(id) })); continue; }
-        list.append(bubble(m.who === 'me' ? 'me' : 'them', m.text));
+        list.append(bubble(m.who === 'me' ? 'me' : 'them', m.text, m));
         k++;
       }
       if (liveEl && !liveEl.isConnected) list.append(liveEl);

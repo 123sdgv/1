@@ -237,7 +237,7 @@ async function crowdJob(job) {
   const s = D.songById(job.song);
   if (!s) return;
   const n = Math.random() < 0.5 ? 2 : 3;
-  const j = parseJSON(await ask(C.buildSongCrowd(s, n), 900));
+  const j = parseJSON(await ask(C.buildSongCrowd(s, n), 3000));
   const items = arr(j?.comments).filter((x) => String(x?.text || '').trim());
   if (!items.length) throw new Error('路人没评论成');
   const fresh = D.songById(job.song);
@@ -261,7 +261,7 @@ async function charJob(job) {
   const s = D.songById(job.song), c = D.charById(job.who);
   if (!s || !c) return;
   const { msgs, nums } = C.buildSongChar(c, s);
-  const j = parseJSON(await ask(msgs, 700, c));
+  const j = parseJSON(await ask(msgs, 3000, c));
   if (!j) throw new Error('他没评论成');
   const all = D.songCmts(job.song), t0 = Date.now();
   const add = [];
@@ -280,7 +280,7 @@ async function replyJob(job) {
   const s = D.songById(job.song), c = D.charById(job.who);
   const cm = s && D.songCmts(job.song).find((x) => x.id === job.cm);
   if (!s || !c || !cm) return;
-  const j = parseJSON(await ask(C.buildSongReply(c, s, cm), 400, c)) || {};
+  const j = parseJSON(await ask(C.buildSongReply(c, s, cm), 1500, c)) || {};
   const all = D.songCmts(job.song), target = all.find((x) => x.id === cm.id);
   if (!target) return;
   if (j.like && !(target.likes || []).includes(c.id)) (target.likes ||= []).push(c.id);
@@ -294,7 +294,7 @@ async function passReplyJob(job) {
   const s = D.songById(job.song);
   const cm = s && D.songCmts(job.song).find((x) => x.id === job.cm);
   if (!s || !cm) return;
-  const j = parseJSON(await ask(C.buildSongPassReply(s, cm, job.who), 300)) || {};
+  const j = parseJSON(await ask(C.buildSongPassReply(s, cm, job.who), 1200)) || {};
   const text = String(j.reply || '').trim();
   const all = D.songCmts(job.song), target = all.find((x) => x.id === cm.id);
   if (!target) return;

@@ -238,15 +238,70 @@ export function quoteText(p, max = QUOTE_MAX) {
   return s.length > max ? s.slice(0, max) + '…' : s;
 }
 
-/** 从模型回复里抠出 JSON：去掉 ```json 包裹，取第一个 { 到最后一个 } */
+/** 从模型回复里抠出 JSON：去掉 ```json 包裹，取第一个 { 到最后一个 }；不合规矩的修一修（见 repairJSON） */
 export function parseJSON(text) {
   const s = stripThink(text).replace(/```(?:json)?/gi, '');
   const a = s.indexOf('{'), b = s.lastIndexOf('}');
-  if (a < 0 || b <= a) return null;
-  const body = s.slice(a, b + 1);
-  try { return JSON.parse(body); } catch {}
-  // 常见毛病：结尾多逗号、中文引号
-  try { return JSON.parse(body.replace(/,\s*([}\]])/g, '$1').replace(/[“”]/g, '"')); } catch { return null; }
+  if (a < 0) return null;
+  if (b > a) { try { return JSON.parse(s.slice(a, b + 1)); } catch {} }
+  for (const t of repairJSON(s.slice(a))) { try { const j = JSON.parse(t); if (j && typeof j === 'object') return j; } catch {} }
+  return null;
+}
+
+/**
+ * 模型写的 JSON 常见毛病，一个字一个字走一遍修好：
+ * 字符串里直接换行、字符串里的 "（他说"好"）没转义、结尾多逗号、用中文引号当引号、
+ * 写到一半被 Token 上限截断（把没写完的字符串、括号补上）。返回几个候选，从好到差，一个个试。
+ */
+export function repairJSON(src) {
+  let out = '', inStr = false, closer = '"';
+  const stack = [], cuts = [];
+  const nextSolid = (i) => { while (i < src.length && /\s/.test(src[i])) i++; return i; };
+  // 字符串里碰到引号：后面跟的是 , } ] : 或者结尾，才算字符串结束；不然就是正文里的引号
+  const ends = (i) => {
+    const j = nextSolid(i + 1), c = src[j];
+    if (c === undefined || c === '}' || c === ']' || c === ':') return true;
+    if (c !== ',') return false;
+    const k = nextSolid(j + 1), d = src[k];
+    return d === undefined || '"“{[}]-0123456789tfn'.includes(d);
+  };
+  const dropComma = () => { out = out.replace(/,\s*$/, ''); };
+  let i = 0;
+  for (; i < src.length; i++) {
+    const ch = src[i];
+    if (inStr) {
+      if (ch === '\\') { out += ch + (src[i + 1] ?? ''); i++; continue; }
+      if (ch === '\n') { out += '\\n'; continue; }
+      if (ch === '\r') continue;
+      if (ch === '\t') { out += '\\t'; continue; }
+      if ((ch === '"' || ch === closer) && ends(i)) { out += '"'; inStr = false; continue; }
+      out += ch === '"' ? '\\"' : ch;
+      continue;
+    }
+    if (ch === '"' || ch === '“' || ch === '”') { inStr = true; closer = ch === '"' ? '"' : '”'; out += '"'; continue; }
+    if (ch === '{' || ch === '[') { stack.push(ch === '{' ? '}' : ']'); out += ch; continue; }
+    if (ch === '}' || ch === ']') {
+      dropComma();
+      if (stack.length) stack.pop();
+      out += ch;
+      if (!stack.length) break; // 整个对象写完了，后面的不要
+      continue;
+    }
+    if (ch === ',') { cuts.push({ at: out.length, stack: [...stack] }); out += ch; continue; }
+    if (/\s/.test(ch)) { out += ' '; continue; }
+    out += ch;
+  }
+  if (!stack.length) return [out];
+  // 被截断了：补上没写完的
+  const close = (body, st) => {
+    body = body.replace(/\s+$/, '').replace(/,$/, '');
+    if (/:$/.test(body)) body += 'null';
+    return body + [...st].reverse().join('');
+  };
+  const list = [close(out + (inStr ? '"' : ''), stack)];
+  // 再退到前面几个逗号那里（扔掉最后那个没写完的键值）
+  for (const c of cuts.slice(-3).reverse()) list.push(close(out.slice(0, c.at), c.stack));
+  return list;
 }
 
 export const fmtYuan = yuan;
