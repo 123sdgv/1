@@ -68,37 +68,103 @@ export function stats(cards) {
 
 /**
  * 解牌：流式，onText(到现在的全文)。
- * 解得长（凯尔特十字十张牌），以前 token 上限给少了会写一半断掉，现在给到 7000；
- * 45 秒什么都没收到就当卡住了，停下（写了一半的留着，能接着解）；整段一起回的那种接口等 4 分钟。
+ * 解得长（凯尔特十字十张牌），以前 token 上限给少了会写一半断掉，现在给到 7000。
+ * 卡住了要停得下来：只有来了正文才算有动静（排队时的 keep-alive、推理模型想的那段都不算）——
+ * 2 分半还没开始写、写了以后 45 秒没新字、或者总共过了 5 分钟，就停下（写了一半的留着，能接着解）。
  * part = 上次写了一半的：接着写，返回的是接上之后的全文
  */
-const STALL = 45000, WHOLE = 240000;
+export const LIMITS = { first: 150000, idle: 45000, timeout: 300000 };
+// 界面上：正在解、这么久没来新字，点子下面出一个重试按钮（不自己停，推理模型想得久）
+export const STALE = { ms: 20000 };
 export async function read(rec, { onText, signal, part = '' } = {}) {
   const g = D.genOf({});
-  const prompt = T.tarotPrompt({ q: rec.q, spread: SPREADS[rec.spread].name, time: TIME_NAME[rec.tf], cards: rec.cards.map((c) => ({ ...c, el: elementOf(c.card), major: isMajor(c.card) })), stats: stats(rec.cards) });
-  const msgs = [{ role: 'user', content: prompt }];
+  const msgs = [{ role: 'user', content: readPrompt(rec) }];
   if (part) msgs.push({ role: 'assistant', content: part }, { role: 'user', content: T.tarotGoOn() });
-  const ctrl = new AbortController();
-  signal?.addEventListener('abort', () => ctrl.abort());
-  let stalled = false, t = 0;
-  const alive = (whole) => { clearTimeout(t); t = setTimeout(() => { stalled = true; ctrl.abort(); }, whole === true ? WHOLE : STALL); };
   const join2 = (more) => (part ? part.replace(/\s+$/, '') + '\n' + more.replace(/^\s+/, '') : more);
   let got = '', why = '';
-  alive();
   try {
     await chat(msgs, {
-      signal: ctrl.signal, temperature: Math.min(1, g.temperature), max_tokens: Math.max(7000, g.maxTokens),
-      onAlive: alive, onEnd: (r) => { why = r; },
+      signal, ...LIMITS, temperature: Math.min(1, g.temperature), max_tokens: Math.max(7000, g.maxTokens),
+      onEnd: (r) => { why = r; },
       onDelta: (_, all) => { got = stripThink(all); onText && onText(join2(got)); },
     });
   } catch (e) {
-    if (stalled) { const err = new Error('半天没动静，停下了'); err.part = join2(got).trim(); throw err; }
     e.part = join2(got).trim();
     throw e;
-  } finally { clearTimeout(t); }
+  }
   // 写到 token 上限被截断了：当成写了一半，能接着解
   if (why === 'length') { const err = new Error('写得太长被截断了'); err.part = join2(got).trim(); throw err; }
   return join2(got).trim();
+}
+function readPrompt(rec) {
+  return T.tarotPrompt({ q: rec.q, spread: SPREADS[rec.spread].name, time: TIME_NAME[rec.tf], cards: rec.cards.map((c) => ({ ...c, el: elementOf(c.card), major: isMajor(c.card) })), stats: stats(rec.cards) });
+}
+
+// ── 追问：解完以后就这一局接着问（不带人设、记忆，只看这一局）。对话存在这一局的 chat 里：
+//    [{ id, who: me/them/sys, text, ts, err（没回上的那一行，点了重试）}]，删这一局时一起没了 ──
+const talks = new Map(); // 这一局 id → { ctrl, text, at（回复要插在第几条后面）}
+const recOf = (id) => D.tarots().find((t) => t.id === id);
+export const chatBusy = (id) => talks.has(id);
+export const chatLive = (id) => { const j = talks.get(id); return j ? { text: j.text, at: j.at } : null; };
+/** 你问一句。他正在回的话，回完接着回你这句 */
+export function ask(id, text) {
+  const rec = recOf(id);
+  if (!rec?.text || !text) return;
+  const log = (rec.chat || []).filter((m) => !m.err);
+  log.push({ id: D.uid(), who: 'me', text, ts: Date.now() });
+  D.saveTarot({ ...rec, chat: log });
+  if (!talks.has(id)) talk(id);
+}
+/** 停下：已经写出来的留着 */
+export const stopChat = (id) => talks.get(id)?.ctrl.abort();
+/** 没回上 → 再来 */
+export function retryChat(id) {
+  const rec = recOf(id);
+  if (!rec || talks.has(id)) return;
+  const log = (rec.chat || []).filter((m) => !m.err);
+  D.saveTarot({ ...rec, chat: log });
+  if (log.at(-1)?.who === 'me') talk(id);
+}
+/** 解牌重来 / 删掉时：正在回的直接扔掉，不留东西 */
+export function dropChat(id) {
+  const j = talks.get(id);
+  if (!j) return;
+  talks.delete(id);
+  j.ctrl.abort();
+  D.emit('tarotChat', id);
+}
+async function talk(id) {
+  const rec = recOf(id);
+  if (!rec?.text) return;
+  const log = (rec.chat || []).filter((m) => !m.err);
+  const job = { ctrl: new AbortController(), text: '', at: log.length };
+  talks.set(id, job);
+  D.emit('tarotChat', id);
+  const g = D.genOf({});
+  const msgs = [
+    { role: 'system', content: T.tarotChatSystem({ q: rec.q, spread: SPREADS[rec.spread].name, time: TIME_NAME[rec.tf], cards: rec.cards, text: rec.text }) },
+    ...log.map((m) => ({ role: m.who === 'me' ? 'user' : 'assistant', content: m.text })),
+  ];
+  let err = null;
+  try {
+    await chat(msgs, {
+      signal: job.ctrl.signal, ...LIMITS, temperature: Math.min(1, g.temperature), max_tokens: Math.max(2000, g.maxTokens),
+      onDelta: (_, all) => { job.text = stripThink(all); D.emit('tarotChat', id); },
+    });
+  } catch (e) { if (e.name !== 'AbortError') err = e; }
+  if (talks.get(id) !== job) return; // 中途被扔掉了（重解、删除）
+  talks.delete(id);
+  const r = recOf(id);
+  if (!r) { D.emit('tarotChat', id); return; }
+  const list = (r.chat || []).slice();
+  const said = job.text.trim();
+  // 没回上：写了一半的不留（重试会整句重来）；你点了停下：写出来的留着
+  if (said && !err) list.splice(Math.min(job.at, list.length), 0, { id: D.uid(), who: 'them', text: said, ts: Date.now() });
+  if (err) list.push({ id: D.uid(), who: 'sys', err: true, text: '没回上：' + (err.message || '出错了'), ts: Date.now() });
+  D.saveTarot({ ...r, chat: list });
+  D.emit('tarotChat', id);
+  // 他回的时候你又问了：接着回
+  if (!err && !job.ctrl.signal.aborted && list.filter((m) => !m.err).at(-1)?.who === 'me') talk(id);
 }
 
 // ── 牌面：黑白，边框 + 编号 + 中间一个图案 + 牌名。大牌每张一个小图案，小牌是花色符号（数字牌按数量排，宫廷牌写字） ──

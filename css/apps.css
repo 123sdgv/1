@@ -244,10 +244,13 @@
 .ta-dk svg { width: 100%; height: 100%; display: block; }
 .ta-dk:nth-child(odd) { --sx: -26px; --r: -6deg; } .ta-dk:nth-child(even) { --sx: 26px; --r: 6deg; }
 @keyframes tashuf { 0% { transform: none; } 50% { transform: translateX(var(--sx)) rotate(var(--r)); } 100% { transform: none; } }
-.ta-out { padding: 8px 22px 20px; }
+.ta-out { padding: 8px 22px 20px; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; border-radius: 14px; transition: background .15s; }
+.ta-out.pressed { filter: none; background: rgba(0,0,0,.05); }
 .ta-h { margin: 16px 0 6px; font-size: 14px; font-weight: 600; letter-spacing: .08em; }
-.ta-p { font: 15.5px/1.95 var(--serif); margin: 0 0 10px; -webkit-user-select: text; user-select: text; }
+.ta-p { font: 15.5px/1.95 var(--serif); margin: 0 0 10px; }
 .ta-dots { color: var(--ink-3); margin: 6px 0; }
+.ta-retry { display: flex; margin: 4px auto 0; color: var(--ink-2); }
+.ta-chat .bub { white-space: normal; }
 .ta-err { margin: 8px 0; }
 .ta-go { margin: 6px 0 0; width: 100%; }
 .ta-big { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 20px 24px; }

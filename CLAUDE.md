@@ -23,7 +23,9 @@ js/core/
                启动时 navigator.storage.persist()；写盘失败不丢（记着那些键过一会儿再试，emit('savefail')，main.js 弹一句）
   data.js      数据模型（下面有表），界面只通过这里读写，改了就 emit
   api.js       OpenAI 兼容接口（地址自动补 /v1/chat/completions），流式；后台任务排队 queue()；fetch 没连上会自己再试一次（0.8 秒后），还不行才报「连不上」；
-               onAlive（每来一块就叫一下，塔罗用来看是不是卡住了）、onEnd(finish_reason)（'length' = 被 Token 上限截断）
+               onEnd(finish_reason)（'length' = 被 Token 上限截断）。**每个请求都有超时**（不然一个卡住，queue() 后面全等着）：
+               timeout 总共最多（默认 4 分钟）、first 多久还没来第一个正文字（默认 = timeout）、idle 正文开始后多久没新字（默认 60 秒）；
+               只有正文算「有动静」（keep-alive、推理模型的思考都不算）。超时扔 ApiError kind 'timeout'，写了一半的在 e.part
   search.js    联网搜索（Tavily / 博查 / Jina / Exa，设置 → API 里选、填 Key）。Tavily 确认能网页直连，别的要用「测试搜索」试
   prompt.js    ★所有提示词都在这里★（调说话方式、日记写法改这个文件）
   context.js   决定给模型看哪些数据、看多少，拼成 messages
@@ -49,8 +51,9 @@ js/core/
                你画我猜自动判：你画的他说中了答案 / 他画的你说中了 = 赢（话里有答案这几个字）；他也能写 [猜对了]。
                reveal、drawSvg 留着给聊天里第六版玩过的旧气泡用
   tarot.js     塔罗：78 张牌、6 种牌阵、抽牌（照 tarot-skill：加权、不重复、正逆位、按时段偏一点，seed 能复现）、牌面和牌背 SVG（原创黑白）、
-               解牌 read：Token 上限至少 7000（推理模型想的也算）、45 秒没动静就停（STALL）、最多 4 分钟（WHOLE）、被截断 / 卡住时把写了一半的放在 e.part，
-               接着解 = 带上写了一半的（assistant）+「从断的地方接着写」
+               解牌 read：Token 上限至少 7000（推理模型想的也算）、LIMITS：2 分半还没开始写 / 写了以后 45 秒没新字 / 总共 5 分钟就停，被截断 / 卡住时把写了一半的放在 e.part，
+               接着解 = 带上写了一半的（assistant）+「从断的地方接着写」；STALE.ms（20 秒）没新字，界面上点子下面出重试图标。
+               追问：ask / talk / stopChat / retryChat / dropChat，提示词 tarotChatSystem（不带人设和记忆，只给问题、牌阵、每张牌正逆位、解牌原文）
   weather.js   Open-Meteo（不要 Key、支持跨域）
   crop.js      选图 + 裁剪（拖动、双指/滚轮/滑条缩放），壁纸还带模糊滑条
   ui.js  time.js   （ui.js 开头把 append(null) 改成跳过，不会再冒出 "null" 字）
@@ -77,8 +80,10 @@ js/apps/<id>/index.js   每个 App 导出 mount(body, { close, arg }) → { go(a
 js/apps/diary/          日记：右上角 ☰ 时间线 · 铅笔（让他现在写，先问一句）· ⭕（点了整页都能改：日记、心里话、关键词，变 ✅，点 ✅ 问「保存修改？」；改到一半要走问一句）。长按一篇 = 删除
                         时间线也一样：铅笔（现在整理，先问一句）· ⭕ 整页改；长按一段 = 重写这段。铅笔放在 ⭕ 左边，是 gray 要的（最右边误点了也只是进入修改）
 js/apps/memo/           备忘录：没有标题那行了；点一条就在原地改（改成空的 = 删掉）；＋ 在最底下新起一条直接打字；**左滑露出红色 ×，点了才删**（swipeRow，icon: 'close'）
-js/apps/tarot/          塔罗：列表（左滑 × 删）→ ＋ 写问题、挑牌阵 → 洗牌、发牌（背面朝上）→ 一张张点开翻牌 → 都翻开自动解（中性的塔罗师口吻）→ 翻开的牌点一下看大图。按身份分开。
-                        边解边存（每 2 秒把写到的放进 rec.part），断了显示写了一半的 +「没解完 点这里接着解」；离开这页也接着解
+js/apps/tarot/          塔罗：列表（左滑 × 删）→ ＋ 写问题、挑牌阵 → 洗牌、发牌（背面朝上）→ 自己一张张翻开（点着也能先翻）→ 都翻开自动解（中性的塔罗师口吻）→ 翻开的牌点一下看大图。按身份分开。
+                        边解边存（每 2 秒把写到的放进 rec.part），断了显示写了一半的 +「没解完 点这里接着解」；离开这页也接着解（牌没翻完就走了也照样解）。
+                        重试一定有反应：正在解的先停掉、扔掉（reading 里那条换成新的），再重新来。
+                        长按解牌那段 → 黑条：重试（先问一句，从头解）、删除（只删解牌和追问，牌和问题留着，下面出「解牌」）、聊天 → 追问页（输入框 + 发送 / 停下，没回上的点了重试）
 js/apps/game/           游戏：盒子（你画我猜、海龟汤两张卡）+ 下面玩过的（左滑 × 删）。点一张 → 半屏：上面选怎么玩（我来画 / 他来画，他出题 / 一起猜），下面点陪你玩的角色 → 一局。
                         一局的页面：上面一块（画板 + 「画的是」/ 画（吸在顶上，键盘起来变小）/ 汤面卡片，玩完才露答案、汤底），下面你们说的话（出题人、结果是一行小字），最底下输入框。
                         右上角：玩着 = 旗子（不猜了 / 公布答案，先问一句）；玩完 = 再来一局（同一个人、同一种玩法）。我来画、还没画就走了，那局不留
@@ -116,7 +121,7 @@ js/apps/read/           阅读：书架（长按封面 改名·删除）→ 一�
 | `readConf` `file.readBg` | 阅读页：`{ size（背景放大 %）, blur, veil（盖在图上那层多淡）, font（字号）}`、背景图。所有书共用 |
 | `layout` | 主屏幕布局 `{ pages: [[{ k, x, y }…], …], dock: [key…], widgets: { 'w:xx': { type, w, h, conf } } }`。key 是 `app:<id>` / `w:<id>`，x 0～3 列、y 第几行。老存档（页里是一串 key、小组件存 size s/m/l、只有 `grid`）`fixLayout` 读的时候按原来的顺序挤着排、换算成坐标 |
 | `file.wg.<小组件key>.<id>` | 相册小组件上放的自己的图（`conf.files` 是一串这种键；只属于这个小组件，不进相册，删小组件时一起删）。老的单张 `conf.file` 读的时候并进 files |
-| `tarot` | 塔罗 `{ id, acc, q（问题）, spread, seed, tf（时段 morning/afternoon/night）, cards: [{ pos, card, up（正位）}], text（解牌）, part（写了一半的）, error, ts }`，按身份分开 |
+| `tarot` | 塔罗 `{ id, acc, q（问题）, spread, seed, tf（时段 morning/afternoon/night）, cards: [{ pos, card, up（正位）}], text（解牌）, part（写了一半的）, error, chat（追问 `[{ id, who: me/them/sys, text, ts, err }]`）, ts }`，按身份分开 |
 | `games` | 游戏 App 的一局 `{ id, acc, char, game: draw/soup, mode（draw: me 我来画 / him 他来画；soup: him 他出题 / coop 一起猜）, ts, lastTs, over, win: me/them/null, ans（画的是什么）, lines（那幅画）, soup: {title, face, bottom, keys}, log: [{ id, ts, who: me/them/host/sys, t: draw/soup/ask, text, err: turn/host/judge }] }`。删角色、删身份时一起删 |
 | `settings` `api` `lock` `weather` `file.wallLock` `file.wallHome` `wallBlur` | 设置（现在只剩新角色的默认值）、接口、锁屏密码、天气城市和缓存、壁纸（裁好的图）和壁纸模糊度。壁纸用 CSS 变量 `--wall` `--wb`，锁屏的图在 `#lock::before` 上 |
 | `search` | 搜索用哪家 `{ provider }`（tavily / bocha / jina / exa，空 = 不用） |
