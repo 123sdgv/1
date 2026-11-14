@@ -1,18 +1,16 @@
 // 相册：普通的相册，文字照片（一段字描述的画面）和真图片（聊天里发的）都在这里。
-// 左上角 ☰ → 角色名单，点一个人 = 你们俩之间的照片（他发的、你发给他的）。右上角 ＋ 自己「拍」一张文字照片。
+// 左上角 ☰ → 角色名单，点一个人 = 你们俩之间的照片（他发的、你发给他的）。右上角 ＋ 先二选一：文字照片（写一段画面）/ 普通图片（从手机选、写一句）；
+// 角色那页也有 ＋，在那页加的算你们俩之间的（他看不到，只有在聊天里发给他的他才知道）。
 // 在相册里删、改，不影响聊天记录（真图片的文件两边共用，两边都不用了才删，见 data.js 的 gcImages）。
-import { h, Stack, page, btnIc, ask, menu, confirm, longPress, toast, sheet, avatar } from '../../core/ui.js';
+import { h, Stack, page, btnIc, ask, menu, confirm, longPress, toast, sheet, avatar, icon } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { md } from '../../core/time.js';
-import { albumTile, viewPhoto } from '../shared.js';
+import { albumTile, viewPhoto, pickPhotoWithCaption } from '../shared.js';
 
 export function mount(body, { close }) {
   const stack = new Stack(body, close);
   D.fixPhotoChars();
-  const pg = page({ title: '相册', big: true, left: btnIc('toc', () => people(), '角色'), right: btnIc('plus', async () => {
-    const v = await ask('拍一张', '', '', true);
-    if (v?.trim()) { D.addPhoto({ desc: v.trim(), who: 'me' }); toast('存好了'); }
-  }, '拍一张') });
+  const pg = page({ title: '相册', big: true, left: btnIc('toc', () => people(), '角色'), right: btnIc('plus', () => addSheet(null), '添加') });
   pg.el.classList.add('alb');
   const draw = () => fill(pg, () => D.photosOf());
   const offs = [D.on('photos', draw), D.on('account', draw)];
@@ -34,12 +32,26 @@ export function mount(body, { close }) {
   // 你们俩之间的：他拍的（聊天、动态里发的），你在跟他的聊天里发的
   const between = (cid) => D.photosOf().filter((p) => p.who === cid || p.char === cid);
   function openChar(cid) {
-    const p = page({ title: D.nameOf(D.charById(cid)), onBack: () => stack.pop() });
+    const p = page({ title: D.nameOf(D.charById(cid)), onBack: () => stack.pop(), right: btnIc('plus', () => addSheet(cid), '添加') });
     p.el.classList.add('alb');
     const redraw = () => fill(p, () => between(cid));
     const offs2 = [D.on('photos', redraw)];
     stack.push({ el: p.el, onDestroy: () => offs2.forEach((f) => f()) });
     redraw();
+  }
+
+  // ＋：两个图标二选一。char = 在哪个角色的那页加的（算你们俩之间的）
+  function addSheet(char) {
+    const tile = (ic, name, fn) => h('button', { class: 'ch-tile', 'aria-label': name, onclick: () => { s.close(); fn(); } }, h('span', { html: icon(ic) }));
+    const s = sheet({ title: '', body: h('div', { class: 'ch-panel alb-add' },
+      tile('edit', '文字照片', async () => {
+        const v = await ask('拍一张', '', '', true);
+        if (v?.trim()) { D.addPhoto({ desc: v.trim(), who: 'me', char: char || undefined }); toast('存好了'); }
+      }),
+      tile('image', '普通图片', async () => {
+        const got = await pickPhotoWithCaption();
+        if (got) { D.addPhoto({ desc: got.desc, file: D.saveImage(got.src), w: got.w, h: got.h, who: 'me', char: char || undefined }); toast('存好了'); }
+      })) });
   }
 
   return { destroy: () => { offs.forEach((f) => f()); stack.destroyAll(); } };

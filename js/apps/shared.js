@@ -1,5 +1,5 @@
 // 几个 App 共用的小东西：文字照片、看照片、选角色、转发的聊天记录卡片
-import { h, sheet, avatar, inlineEdit, toast, icon } from '../core/ui.js';
+import { h, sheet, avatar, inlineEdit, toast, icon, pickImage } from '../core/ui.js';
 import * as D from '../core/data.js';
 import { md, hm } from '../core/time.js';
 
@@ -33,6 +33,21 @@ export function viewPhoto(p, { edit = null } = {}) {
   const s = sheet({ title: '照片', body: h('div', { class: 'ph-view' }, pic,
     p.ts ? h('p', { class: 'ph-meta', text: `${who} · ${md(p.ts)} ${hm(p.ts)}` }) : null) });
   if (edit) setTimeout(() => inlineEdit(txt, p.desc || '', { save: (v) => { if (!v && !p.file) { toast('不能是空的'); return false; } if (v !== (p.desc || '')) edit(v); }, done: () => s.close() }), 380);
+}
+
+/** 从手机挑一张图（压到 1280），上面是图、下面写一句（他看不见图，只读这句；可以不写）。返回 { src, desc, w, h }，没要是 null */
+export async function pickPhotoWithCaption() {
+  const src = await pickImage({ max: 1280, quality: 0.8 });
+  if (!src) return null;
+  return new Promise((res) => {
+    const t1 = h('textarea', { class: 'dlg-in', rows: 3 });
+    const pre = h('img', { class: 'img-pre', src, alt: '' });
+    let done = false;
+    const s = sheet({ title: '', onClose: () => { if (!done) res(null); }, body: h('div', { class: 'money img-send' },
+      pre,
+      h('label', {}, t1),
+      h('button', { class: 'btn wide', text: '好', onclick: () => { done = true; res({ src, desc: t1.value.trim(), w: pre.naturalWidth || 0, h: pre.naturalHeight || 0 }); s.close(); } })) });
+  });
 }
 
 /** 书的封面：按书名算一个固定的深灰，书名竖着写。mini = 小图不写字；kids = 叠在封面上的东西（比如一起读的人的头像） */

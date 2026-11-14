@@ -63,6 +63,27 @@ async def main(size):
         # 聊天里全删：两边都不用了的图删掉
         await ph.page.evaluate("import('./js/core/chat.js').then(m => m.clearChat('c0'))"); await asyncio.sleep(2)
         check(await n_img() == 1, f'聊天也删了 → 那张图删掉，相册还在用的留着（{await n_img()}）')
+        # 相册 ＋：二选一。普通图片（在阿二那页加 = 你们俩之间的）、文字照片
+        await ph.page.evaluate("document.querySelector('.win .pg:last-child .bar .bk')?.click()"); await asyncio.sleep(0.6)
+        await ph.top('button[aria-label="角色"]').click(); await asyncio.sleep(0.5)
+        await ph.page.locator('.sheet .pick-it').nth(1).click(); await asyncio.sleep(0.6)
+        await ph.top('button[aria-label="添加"]').click(); await asyncio.sleep(0.5)
+        tiles = await ph.page.locator('.alb-add .ch-tile').evaluate_all('ts => ts.map(t => t.getAttribute("aria-label"))')
+        check(tiles == ['文字照片', '普通图片'], f'＋ 二选一：{tiles}')
+        await ph.shot(f'album_add_{size[0]}')
+        async with ph.page.expect_file_chooser() as fc:
+            await ph.page.locator('.alb-add .ch-tile[aria-label="普通图片"]').click()
+        await (await fc.value).set_files(img); await asyncio.sleep(1)
+        await ph.page.locator('.img-send textarea').fill('阿二家的猫')
+        await ph.page.locator('.img-send .btn').click(); await asyncio.sleep(0.6)
+        await ph.top('button[aria-label="添加"]').click(); await asyncio.sleep(0.5)
+        await ph.page.locator('.alb-add .ch-tile[aria-label="文字照片"]').click(); await asyncio.sleep(0.5)
+        await ph.page.locator('.dlg-in').fill('海边的风'); await ph.page.locator('.dlg-btns button.main').click(); await asyncio.sleep(0.6)
+        mine = await ph.page.evaluate("__xsj.D.photos().filter(p => p.char === 'c1').map(p => [!!p.file, p.desc])")
+        check(sorted(mine) == [[False, '海边的风'], [True, '阿二家的猫']], f'阿二那页加的两张都算你们俩的：{mine}')
+        check(await ph.top('.ph-grid .ph').count() == 2, '阿二那页看得到这两张')
+        await ph.flush(); await asyncio.sleep(2)
+        check(await ph.page.evaluate("!!__xsj.D.file(__xsj.D.photos().find(p => p.desc === '阿二家的猫').file)"), '相册里传的图没被当成没人用的删掉')
         check(not ph.errors, f'控制台没报错 {ph.errors[:3]}')
 
 for size in [(393, 852), (390, 844), (375, 667)] if len(sys.argv) < 2 else [tuple(map(int, sys.argv[1].split('x')))]:

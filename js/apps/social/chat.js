@@ -4,12 +4,12 @@
 // 多选：每条前面一个圆圈，一次删掉或者合并转发（到动态、或者别的角色）。
 // 你发完消息他会自动回（core/chat.js 的 autoReply），不用点按钮。
 // 一起玩的小游戏在游戏 App 里（apps/game）；第六版在聊天里玩过的画、海龟汤还照样显示，长按没揭晓的汤 = 翻开汤底。
-import { h, page, avatar, icon, btnIc, menu, toast, longPress, autosize, sheet, popbar, confirm, pickImage } from '../../core/ui.js';
+import { h, page, avatar, icon, btnIc, menu, toast, longPress, autosize, sheet, popbar, confirm } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { sep, md } from '../../core/time.js';
 import { fmtYuan, makeVoice, quoteText } from '../../core/parse.js';
 import * as CS from '../../core/chat.js';
-import { photoTile, imgTile, albumTile, viewPhoto, fwdCard, bookCover } from '../shared.js';
+import { photoTile, imgTile, albumTile, viewPhoto, fwdCard, bookCover, pickPhotoWithCaption } from '../shared.js';
 import * as G from '../../core/game.js';
 import { editChar } from './char.js';
 import { stickerSheet } from './stickers.js';
@@ -360,29 +360,15 @@ export function openChat(ctx, cid, { at = null } = {}) {
     const grid = h('div', { class: 'ph-grid' });
     const s = sheet({ title: '相册', body: grid, full: true });
     grid.append(h('button', { class: 'ph ph-add', 'aria-label': '从手机里选', html: icon('plus'), onclick: async () => {
-      const src = await pickImage({ max: 1280, quality: 0.8 });
-      if (!src) return;
-      s.close();
-      const got = await imgSheet(src);
+      const got = await pickPhotoWithCaption();
       if (!got) return;
-      sendParts([{ t: 'img', file: D.saveImage(src), desc: got.desc, w: got.w, h: got.h }]);
+      s.close();
+      sendParts([{ t: 'img', file: D.saveImage(got.src), desc: got.desc, w: got.w, h: got.h }]);
     } }));
     for (const p of ps) grid.append(albumTile(p, { onclick: () => {
       s.close();
       sendParts([p.file ? { t: 'img', file: p.file, desc: p.desc || '', w: p.w, h: p.h } : { t: 'photo', desc: p.desc }], { album: false });
     } }));
-  }
-  /** 发真图片前：上面是图，下面写一句（他看不见图，只读这句；可以不写）。返回 { desc, w, h }，没发是 null */
-  function imgSheet(src) {
-    return new Promise((res) => {
-      const t1 = h('textarea', { class: 'dlg-in', rows: 3 });
-      const pre = h('img', { class: 'img-pre', src, alt: '' });
-      let done = false;
-      const s = sheet({ title: '', onClose: () => { if (!done) res(null); }, body: h('div', { class: 'money img-send' },
-        pre,
-        h('label', {}, t1),
-        h('button', { class: 'btn wide', text: '发送', onclick: () => { done = true; res({ desc: t1.value.trim(), w: pre.naturalWidth || 0, h: pre.naturalHeight || 0 }); s.close(); } })) });
-    });
   }
   /** 写一段字（照片的画面、语音说的话）。返回文字或 null */
   function textSheet(title) {
