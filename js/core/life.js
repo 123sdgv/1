@@ -71,12 +71,24 @@ async function momentJobs() {
   for (const m of D.momentsOf()) {
     for (const job of [...(m.jobs || [])]) {
       if (job.due > Date.now() || done >= 4) continue;
-      // 先从队列里拿掉，失败了也不反复重试
+      // 先从队列里拿掉（跑的时候别被下一次 tick 再拿一遍）
+      const same = (j) => j === job || (j.kind === job.kind && j.who === job.who && j.due === job.due && j.cid === job.cid);
       const fresh = D.moments().find((x) => x.id === m.id);
       if (!fresh) break;
-      fresh.jobs = fresh.jobs.filter((j) => j !== job && !(j.kind === job.kind && j.who === job.who && j.due === job.due && j.cid === job.cid));
+      fresh.jobs = fresh.jobs.filter((j) => !same(j));
       D.saveMoment(fresh);
-      try { await runJob(fresh, job); } catch (e) { console.warn('动态', e.message); if (e.kind === 'config' || e.kind === 'network') throw e; }
+      try { await runJob(fresh, job); } catch (e) {
+        console.warn('动态', e.message);
+        // 没成（断网、超时、接口出错）：放回去，过一会儿再试，越往后隔得越久；试了 4 次还不行才算了。
+        // 还没填 API 的不算次数
+        const tries = (job.tries || 0) + (e.kind === 'config' ? 0 : 1);
+        const back = D.moments().find((x) => x.id === m.id);
+        if (back && tries < 4) {
+          back.jobs = [...(back.jobs || []), { ...job, tries, due: Date.now() + (e.kind === 'config' ? 30 : 5 * 2 ** tries) * MIN }];
+          D.saveMoment(back);
+        }
+        if (e.kind === 'config' || e.kind === 'network') throw e;
+      }
       done++;
     }
   }
