@@ -15,9 +15,11 @@
 ## 目录
 
 ```
-index.html  manifest.webmanifest  .nojekyll  assets/（网站图标：黑底白色心电图，icon.svg 是源，PNG 用 Playwright 渲染）
+index.html  manifest.webmanifest  .nojekyll  sw.js（整版缓存，见下）  tests/（测试：假接口 + Playwright，见「测试」）  assets/（网站图标：黑底白色心电图，icon.svg 是源，PNG 用 Playwright 渲染）
 css/  base.css（颜色变量、通用部件）  phone.css（锁屏、主屏、小组件、窗口）  social.css  apps.css  read.css（阅读，连聊天里的书卡片）
-js/main.js                入口：读存档 → 壁纸 → 主屏 → 锁屏 → 横幅通知 → 后台补算；键盘弹出时缩手机
+js/main.js                入口：读存档 → 壁纸 → 主屏 → 锁屏 → 横幅通知 → 后台补算 → 装 sw.js（initSW）；键盘弹出时缩手机
+sw.js                     整版缓存：一个版本的文件一起存、一起换（不会一半新一半旧），没网也能打开。VERSION / FILES 是 tests/stamp.py 按文件内容写的，**推之前必须跑**。
+                          新版：打开时浏览器在后台整版下好 → 刚打开 15 秒内还在锁屏上、或者切回来停在锁屏上又没开着 App，就换（整页重新载入）；不然等下次打开
 js/core/
   store.js     存档：IndexedDB 一张键值表，启动时全读进内存，改了延迟写回；导出导入就是整表倒出/倒入；事件总线 on/emit
                启动时 navigator.storage.persist()；写盘失败不丢（记着那些键过一会儿再试，emit('savefail')，main.js 弹一句）
@@ -169,8 +171,9 @@ Python Playwright，`ctx.route('https://fake.api/**', …)` 做假接口（scrat
 - 直接推 `main`。commit 作者 `Claude <noreply@anthropic.com>`，信息结尾加会话给的署名行。
 
 ```bash
-git add -A && git -c user.name="Claude" -c user.email="noreply@anthropic.com" commit -q -m "..." && git push origin HEAD:main
+python3 tests/stamp.py && git add -A && git -c user.name="Claude" -c user.email="noreply@anthropic.com" commit -q -m "..." && git push origin HEAD:main
 ```
+（stamp.py 按文件内容更新 sw.js 的版本号；不跑的话手机上会一直用旧版）
 
 ## gray 的偏好（长期有效）
 

@@ -73,6 +73,32 @@ function fitViewport() {
   apply();
 }
 
+// 整版缓存（sw.js）：没网也能打开。推了新版：打开时浏览器在后台整版下好 → 还在锁屏上就马上换（整页重新载入一下）。
+// 能换的时候只有两种：刚打开 15 秒内、或者从后台切回来停在锁屏上而且没开着 App（没有打到一半的字）；别的时候等下次
+function initSW() {
+  if (!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
+  const sw = navigator.serviceWorker, t0 = Date.now();
+  let swapping = false;
+  const swap = (w) => {
+    if (swapping || !w || !sw.controller || !isLocked() || (Date.now() - t0 > 15000 && currentApp())) return;
+    swapping = true;
+    w.postMessage('skip');
+  };
+  sw.addEventListener('controllerchange', () => { if (swapping) S.flush().finally(() => location.reload()); });
+  sw.register('sw.js').then((reg) => {
+    const watch = (w) => w?.addEventListener('statechange', () => { if (w.state === 'installed') swap(w); });
+    swap(reg.waiting);
+    watch(reg.installing); // 打开时浏览器可能已经在下新版了
+    reg.addEventListener('updatefound', () => watch(reg.installing));
+    // 从后台切回来也看一眼有没有新版（下好了等下次打开再换）
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      setTimeout(() => swap(reg.waiting), 400);
+      reg.update().catch(() => {});
+    });
+  }).catch((e) => console.warn('sw', e.message));
+}
+
 async function boot() {
   fitViewport();
   await S.boot();
@@ -87,5 +113,6 @@ async function boot() {
   D.on('savefail', () => { if (Date.now() - saidAt > 60000) { saidAt = Date.now(); toast('没存上：手机空间可能满了', 3500); } });
   startLife();
   window.__xsj = { S, D, openApp, currentApp };
+  initSW();
 }
 boot().catch((e) => { console.error(e); document.body.append(h('pre', { class: 'fatal', text: '启动失败：' + e.message })); });

@@ -11,6 +11,7 @@
 import asyncio, os, socket, subprocess, sys
 from playwright.async_api import async_playwright
 from fakeapi import FakeApi
+from stamp import stamp
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHOTS = os.path.join(ROOT, 'tests', 'shots')
@@ -34,6 +35,7 @@ class Phone:
         self.errors = []
 
     async def __aenter__(self):
+        stamp()  # sw.js 的版本号跟着文件内容走
         ensure_web()
         os.makedirs(SHOTS, exist_ok=True)
         self.api = FakeApi(self.api_port).start()
