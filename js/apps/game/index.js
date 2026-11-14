@@ -1,8 +1,8 @@
 // 游戏：盒子里两样（你画我猜、海龟汤）。点一样 → 选怎么玩（我来画 / 他来画，他出题 / 一起猜）、选陪你玩的角色 → 进一局。
 // 一局在这里自己的页面里玩：上面是画 / 汤面，下面是你们说的话，最底下输入框。不进聊天；
 // 玩过的他都知道（聊天、写日记时，见 context.js 的 gameLine）。逻辑在 core/game.js。
-// 玩过的列在盒子下面，点了接着看 / 接着玩，左滑 × 删。按身份分开。
-import { h, Stack, page, icon, sheet, swipeRow, avatar, autosize, confirm } from '../../core/ui.js';
+// 主页面只有两张卡；右上角 ☰ = 玩过的（按游戏分组），点了接着看 / 接着玩，左滑 × 删。按身份分开。
+import { h, Stack, page, icon, btnIc, sheet, swipeRow, avatar, autosize, confirm } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import * as G from '../../core/game.js';
 import { GAME_NAME } from '../../core/prompt.js';
@@ -17,30 +17,43 @@ const modeName = (g) => G.MODE_NAME[g.game]?.[g.mode] || '';
 
 export function mount(body, { close }) {
   const stack = new Stack(body, close);
-  const pg = page({ title: '游戏', big: true, left: h('span') });
+  const pg = page({ title: '游戏', big: true, left: h('span'), right: btnIc('toc', () => openPast(), '玩过的') });
   pg.el.classList.add('gm');
   const boxes = h('div', { class: 'gm-box' }, ['draw', 'soup'].map((k) => h('button', { class: 'gm-tile', onclick: () => pick(k) },
     h('span', { class: 'gm-art', html: ART[k] }), h('b', { text: GAME_NAME[k] }))));
-  const past = h('div', { class: 'gm-past' });
-  pg.scroll.append(boxes, past);
-  // 玩过的
-  const draw = () => {
-    past.innerHTML = '';
-    for (const g of D.gamesOf()) {
-      const c = D.charById(g.char);
-      if (!c) continue;
-      const it = h('button', { class: 'gm-it', onclick: () => openGame(g.id) },
-        avatar(c.avatar, D.nameOf(c), 'sm'),
-        h('div', { class: 'gm-it-t' }, h('b', { text: `${GAME_NAME[g.game]} · ${modeName(g)}` }), h('small', { text: G.brief(g) })),
-        h('small', { class: 'gm-it-d', text: `${md(g.lastTs || g.ts)} ${hm(g.lastTs || g.ts)}` }));
-      past.append(swipeRow(it, () => G.remove(g.id), { icon: 'close' }));
-    }
-  };
-  let drawT = 0;
-  const later = () => { clearTimeout(drawT); drawT = setTimeout(draw, 120); };
-  const offs = [D.on('game', later), D.on('account', draw)];
-  stack.root({ el: pg.el, onShow: draw });
-  draw();
+  pg.scroll.append(boxes);
+  stack.root({ el: pg.el });
+
+  // ── 右上角 ☰：玩过的，按游戏分两组（组里新的在上面），点了接着看 / 接着玩，左滑 × 删 ──
+  function openPast() {
+    const p = page({ title: '玩过的', onBack: () => stack.pop() });
+    p.el.classList.add('gm');
+    const past = h('div', { class: 'gm-past' });
+    p.scroll.append(past);
+    const draw = () => {
+      past.innerHTML = '';
+      const all = D.gamesOf().filter((g) => D.charById(g.char));
+      if (!all.length) { past.append(h('div', { class: 'empty' }, h('b', { text: '还没有玩过' }))); return; }
+      for (const k of ['draw', 'soup']) {
+        const list = all.filter((g) => g.game === k);
+        if (!list.length) continue;
+        past.append(h('div', { class: 'gm-past-t', text: GAME_NAME[k] }));
+        for (const g of list) {
+          const c = D.charById(g.char);
+          const it = h('button', { class: 'gm-it', onclick: () => openGame(g.id) },
+            avatar(c.avatar, D.nameOf(c), 'sm'),
+            h('div', { class: 'gm-it-t' }, h('b', { text: `${D.nameOf(c)} · ${modeName(g)}` }), h('small', { text: G.brief(g) })),
+            h('small', { class: 'gm-it-d', text: `${md(g.lastTs || g.ts)} ${hm(g.lastTs || g.ts)}` }));
+          past.append(swipeRow(it, () => G.remove(g.id), { icon: 'close' }));
+        }
+      }
+    };
+    let drawT = 0;
+    const later = () => { clearTimeout(drawT); drawT = setTimeout(draw, 120); };
+    const offs2 = [D.on('game', later), D.on('account', draw)];
+    stack.push({ el: p.el, onShow: draw, onDestroy: () => { clearTimeout(drawT); offs2.forEach((f) => f()); } });
+    draw();
+  }
 
   // ── 选怎么玩、选谁陪你玩 ──
   function pick(game) {
@@ -228,5 +241,5 @@ export function mount(body, { close }) {
     toBottom();
   }
 
-  return { destroy: () => { offs.forEach((f) => f()); clearTimeout(drawT); stack.destroyAll(); } };
+  return { destroy: () => stack.destroyAll() };
 }

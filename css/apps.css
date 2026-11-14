@@ -267,7 +267,9 @@
 .gm-art { width: 64px; height: 64px; color: var(--ink); }
 .gm-art svg { width: 100%; height: 100%; display: block; }
 .gm-tile b { font-size: 16px; font-weight: 600; }
-.gm-past { padding: 0 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+.gm-past { padding: 12px 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+.gm-past-t { margin: 10px 4px 0; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.gm-past-t:first-child { margin-top: 0; }
 .gm-past .sw-wrap { border-radius: 16px; background: var(--card); }
 .gm-it { width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 16px; background: var(--card); text-align: left; }
 .gm-it-t { flex: 1; min-width: 0; }
