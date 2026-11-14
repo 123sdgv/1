@@ -1,4 +1,4 @@
-// 设置：API、锁屏密码和壁纸（裁剪、模糊）、备份。温度、Token、上下文和他的生活都在每个角色的资料里设
+// 设置：API、锁屏密码和壁纸（裁剪、模糊）、备份。他的生活在每个角色的资料里设；温度、Token、上下文不让设了（固定，见 data.js 的 GEN）
 import { h, Stack, page, group, row, inputRow, toast, confirm, dialog, sheet, download, menu } from '../../core/ui.js';
 import { pickCrop } from '../../core/crop.js';
 import { isLocked } from '../../phone/lock.js';

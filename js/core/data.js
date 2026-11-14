@@ -8,9 +8,8 @@ export const uid = () => Date.now().toString(36) + Math.random().toString(36).sl
 export const now = () => Date.now();
 
 // ── 设置 ──
-// 这些现在都是每个角色单独设（角色资料里），这里只当新角色和老存档的默认值
+// 他的生活现在都是每个角色单独设（角色资料里），这里只当新角色和老存档的默认值
 const SETTINGS = {
-  temperature: 0.9, maxTokens: 1500, histLen: 40,
   proactive: true, awayHours: 6, charPosts: true, autoDiary: true, quietFrom: 1, quietTo: 8,
 };
 export const settings = () => ({ ...SETTINGS, ...S.get('settings', {}) });
@@ -84,7 +83,7 @@ export const charById = (id) => allChars().find((c) => c.id === id) || null;
 // 显示用的名字：你给的备注 > 名字
 export const nameOf = (c) => (c ? c.nick || c.name || '未命名' : '');
 export function newChar(acc = curAccount().id) {
-  return { id: uid(), acc, name: '', nick: '', avatar: null, persona: '', knows: [], life: lifeOf({}), gen: genOf({}), createdAt: now() };
+  return { id: uid(), acc, name: '', nick: '', avatar: null, persona: '', knows: [], life: lifeOf({}), createdAt: now() };
 }
 // 他的生活（每个角色单独设）：多久没聊来找你、多久发一条动态、多久写一篇日记、多久写一封信、几点到几点别打扰
 export function lifeOf(c) {
@@ -98,11 +97,10 @@ export function lifeOf(c) {
     ...(c?.life || {}),
   };
 }
-// 模型参数（每个角色单独设）：温度、一次最多回多少 token、带多少条聊天记录。老存档用原来设置里的
-export function genOf(c) {
-  const st = settings();
-  return { temperature: st.temperature, maxTokens: st.maxTokens, histLen: st.histLen, ...(c?.gen || {}) };
-}
+// 模型参数不让设了（gray 定的）：温度固定 0.85；Token 不限（不发 max_tokens，用接口自己的默认）；带最近 40 条聊天，
+// 嫌前面的太多就在资料里「隔断记忆」（只看隔断后面的）。老存档里存的 gen 不管了
+export const GEN = Object.freeze({ temperature: 0.85, maxTokens: null, histLen: 40 });
+export const genOf = () => ({ ...GEN });
 export function saveChar(c) {
   const list = allChars();
   const i = list.findIndex((x) => x.id === c.id);
@@ -152,6 +150,12 @@ export function addMsg(cid, rec) {
   return rec;
 }
 export const partsOf = (rec) => rec.alts?.[rec.cur || 0] || [];
+/** 隔断记忆：聊天记录里一条 { role: 'note', 部件 { t: 'cut' } }。他回消息只看最后一条隔断后面的 */
+export const isCut = (rec) => rec?.role === 'note' && partsOf(rec).some((p) => p.t === 'cut');
+export function afterCut(list) {
+  for (let i = list.length - 1; i >= 0; i--) if (isCut(list[i])) return list.slice(i + 1);
+  return list;
+}
 export function touchMsgs(cid) { S.touch('msgs.' + cid); emit('msgs', cid); }
 
 // pinned：置顶的时间（越早置顶越靠前）；老存档里是 true，当成最早

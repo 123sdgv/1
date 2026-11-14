@@ -7,7 +7,7 @@ import { parseJSON, stripThink } from './parse.js';
 
 const MIN = 60000, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const rand = (a, b) => a + Math.random() * (b - a);
-const ask = (c, msgs, max) => chat(msgs, { stream: false, max_tokens: max, temperature: D.genOf(c).temperature });
+const ask = (c, msgs) => chat(msgs, { stream: false, temperature: D.genOf(c).temperature });
 const accOf = (c) => D.accounts().find((a) => a.id === c.acc) || D.curAccount();
 
 /** 你发一封信：存进「已发送」，再看收件人是谁 */
@@ -44,7 +44,7 @@ export function charMail(c, { subject, body }) {
 
 /** 他给自己起邮箱名 */
 export async function makeMailName(c) {
-  const j = parseJSON(await ask(c, C.buildMailName(c), 1000));
+  const j = parseJSON(await ask(c, C.buildMailName(c)));
   const local = String(j?.mail || '').toLowerCase().replace(/@.*$/, '').replace(/[^a-z0-9._]/g, '').replace(/^[._]+|[._]+$/g, '').slice(0, 20);
   const fresh = D.charById(c.id);
   if (!fresh) return null;
@@ -59,7 +59,7 @@ async function replyJob(job) {
   const c = D.charById(job.who);
   const mine = D.mails().find((m) => m.id === job.mail);
   if (!c || !mine) return;
-  const raw = await ask(c, C.buildMailReply(c, mine), 5000);
+  const raw = await ask(c, C.buildMailReply(c, mine));
   const j = parseJSON(raw);
   let body = String(j?.body || '').trim();
   if (!body && !j) body = stripThink(raw).replace(/^```\w*\s*|```\s*$/g, '').trim();
@@ -68,7 +68,7 @@ async function replyJob(job) {
   charMail(c, { subject, body });
 }
 async function writeJob(c) {
-  const j = parseJSON(await ask(c, C.buildMailWrite(c), 5000));
+  const j = parseJSON(await ask(c, C.buildMailWrite(c)));
   if (!j || !String(j.body || '').trim()) return;
   charMail(c, { subject: j.subject, body: j.body });
 }

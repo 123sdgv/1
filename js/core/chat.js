@@ -62,7 +62,7 @@ export async function reply(cid, { regen = false, extra = null, away = false } =
     for (let round = 0; round < 2; round++) {
       let shown = -1, cutAt = -1;
       text = await chat(C.buildChat(c, { extra, uptoId, skipId: regen ? null : rec.id, canSearch: canSearch && round === 0, search }), {
-        signal: ctrl.signal, temperature: g.temperature, max_tokens: g.maxTokens,
+        signal: ctrl.signal, temperature: g.temperature,
         onDelta: (_, all) => {
           if (gone()) { ctrl.abort(); return; }
           // 只把已经写完的整行变成气泡，正在写的那行先不出；写了 [搜索] 以后的都不出
@@ -221,6 +221,12 @@ function finish(c, rec, acts) {
 }
 
 export function note(cid, text) { return D.addMsg(cid, { role: 'note', alts: [[{ t: 'note', text }]] }); }
+/** 隔断记忆：聊天里出一条线，他回消息只看线下面的（context.js 用 D.afterCut）。线上面的还在；还没写进日记的照样会写进日记。长按那条线能删掉 */
+export function cutMemory(cid) {
+  const list = D.msgs(cid);
+  if (!list.length || D.isCut(list[list.length - 1])) return null;
+  return D.addMsg(cid, { role: 'note', alts: [[{ t: 'cut' }]] });
+}
 
 // ── 撤回 ──
 /**
@@ -252,7 +258,15 @@ export function removeParts(cid, drop) {
   const left = [];
   let goneBefore = false;
   for (const r of D.msgs(cid)) {
-    if (r.role === 'note') { if (!goneBefore) left.push(r); continue; }
+    if (r.role === 'note') {
+      // 系统小字跟着前面那条走；隔断记忆那条线不跟着走，只有点名删它才删
+      if (goneBefore && !D.isCut(r)) continue;
+      const parts = D.partsOf(r), keep = parts.filter((_, i) => !drop(r, i));
+      if (!keep.length) continue;
+      if (keep.length !== parts.length) r.alts[r.cur || 0] = keep;
+      left.push(r);
+      continue;
+    }
     const parts = D.partsOf(r);
     const keep = parts.filter((_, i) => !drop(r, i));
     const cut = keep.length !== parts.length;
@@ -315,7 +329,7 @@ export async function offlineReply(sid, { regen = false } = {}) {
   try {
     const g = C.storyGen(st);
     await chat(C.buildOffline(st, { uptoId }), {
-      signal: ctrl.signal, temperature: g.temperature, max_tokens: g.maxTokens,
+      signal: ctrl.signal, temperature: g.temperature,
       onDelta: (_, all) => { rec.alts[rec.cur] = [{ t: 'text', text: stripThink(all).trim() }]; D.setStoryMsgs(sid, list); },
     });
   } catch (e) {

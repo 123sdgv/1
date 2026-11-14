@@ -171,6 +171,7 @@ export function buildChat(c, { extra = null, uptoId = null, skipId = null, canSe
   if (uptoId) { const i = list.findIndex((r) => r.id === uptoId); if (i >= 0) list = list.slice(0, i); }
   if (skipId) list = list.filter((r) => r.id !== skipId);
   const prevTs = list.filter((r) => r.role !== 'note').slice(-2)[0]?.ts;
+  list = D.afterCut(list); // 隔断记忆：只看最后那条线下面的
   const me = meName(acc);
   const sys = T.chatSystem({
     c, me,
@@ -197,7 +198,7 @@ export function buildChat(c, { extra = null, uptoId = null, skipId = null, canSe
 }
 
 /** 线下剧情用哪套模型参数：社交里的角色用他的，自己写的用这段故事的 */
-export const storyGen = (st) => (st.char ? D.genOf(D.charById(st.char)) : D.genOf(st.card || {}));
+export const storyGen = () => D.genOf();
 /** 线下剧情 */
 export function buildOffline(st, { uptoId = null } = {}) {
   let list = D.storyMsgs(st.id);
@@ -206,7 +207,7 @@ export function buildOffline(st, { uptoId = null } = {}) {
   if (st.char) {
     const c = D.charById(st.char), acc = accOf(c);
     me = meName(acc);
-    const chat = D.msgs(c.id).slice(-LIMIT.offlineChat).map((r) => `${r.role === 'them' ? c.name : me}：${D.partsOf(r).map(partText).join(' / ')}`).join('\n');
+    const chat = D.afterCut(D.msgs(c.id)).slice(-LIMIT.offlineChat).map((r) => `${r.role === 'them' ? c.name : me}：${D.partsOf(r).map(partText).join(' / ')}`).join('\n');
     sys = T.offlineSystem({
       c, me, scene: st.scene,
       identityText: identityOf(c),
@@ -235,7 +236,11 @@ export function buildOffline(st, { uptoId = null } = {}) {
 export function diaryLog(c, since) {
   const acc = accOf(c), me = meName(acc);
   const rows = [];
-  for (const r of D.msgs(c.id)) if (r.ts > since) rows.push([r.ts, `${hm(r.ts)} ${r.role === 'them' ? c.name : r.role === 'note' ? '（系统）' : me}：${D.partsOf(r).map(partText).join(' / ')}`]);
+  for (const r of D.msgs(c.id)) {
+    if (r.ts <= since) continue;
+    const text = D.partsOf(r).map(partText).filter(Boolean).join(' / ');
+    if (text) rows.push([r.ts, `${hm(r.ts)} ${r.role === 'them' ? c.name : r.role === 'note' ? '（系统）' : me}：${text}`]);
+  }
   for (const st of D.stories().filter((s) => s.char === c.id)) {
     for (const r of D.storyMsgs(st.id)) if (r.ts > since) rows.push([r.ts, `${hm(r.ts)} 【见面·${st.title || '线下'}】${r.role === 'them' ? '' : me + '：'}${cut(D.partsOf(r).map(partText).join(' '), 600)}`]);
   }

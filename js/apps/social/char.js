@@ -1,4 +1,4 @@
-// 角色资料：新建 / 看 / 改。头像、名字、备注、人设（一行，点进去整页改）、认识谁、他的生活（开了才展开）、聊天背景（图 + 大小·模糊·淡）、模型参数（滑条）、日记 / 备忘录 / 线下入口
+// 角色资料：新建 / 看 / 改。头像、名字、备注、人设（一行，点进去整页改）、认识谁、他的生活（开了才展开）、聊天背景（图 + 大小·模糊·淡）、日记 / 备忘录 / 线下入口
 // 平时只能看；右上角 ⭕ 点了才能改，变成 ✅，点 ✅ 问一句再存。改到一半要走也问一句。新建的一进来就能改。
 import { h, page, avatar, group, row, inputRow, textRow, toast, confirm, stepRow, slideRow, foldRow, icon, modeBtn, askSave, askLeave, $ } from '../../core/ui.js';
 import { pickCrop } from '../../core/crop.js';
@@ -6,22 +6,13 @@ import * as D from '../../core/data.js';
 import { openApp } from '../../phone/window.js';
 import * as CS from '../../core/chat.js';
 
-/** 模型参数的三根滑条（线下自己写的故事也用这个）。ro = 只能看 */
-export function genRows(g, ro = false) {
-  return [
-    slideRow({ label: '温度', value: g.temperature, min: 0, max: 2, step: 0.05, fmt: (v) => v.toFixed(2), onchange: (v) => { g.temperature = v; }, ro }),
-    slideRow({ label: 'Token 上限', value: g.maxTokens, min: 200, max: 8000, step: 100, fmt: (v) => String(v), onchange: (v) => { g.maxTokens = v; }, ro }),
-    slideRow({ label: '上下文', value: g.histLen, min: 10, max: 200, step: 5, fmt: (v) => v + ' 条', onchange: (v) => { g.histLen = v; }, ro }),
-  ];
-}
-
 export function editChar(ctx, cid) {
   const isNew = !cid;
   const load = () => {
     const x = isNew ? D.newChar() : structuredClone(D.charById(cid));
     if (!x) return null;
     x.life = D.lifeOf(x);
-    x.gen = D.genOf(x);
+    delete x.gen; // 模型参数不让设了（温度、Token、上下文都固定，见 data.js 的 GEN）
     x.bg = D.chatBgOf(x);
     return x;
   };
@@ -94,14 +85,15 @@ export function editChar(ctx, cid) {
         foldRow({ label: '自己写信', value: L.mail, onchange: setL('mail'), ro, kids: [step('大概多久一封', 'mailDays', 1, 30, 1, ' 天')] }),
         foldRow({ label: '别打扰的时间', value: L.quiet, onchange: setL('quiet'), ro, kids: [step('从', 'quietFrom', 0, 23, 1, ' 点'), step('到', 'quietTo', 0, 23, 1, ' 点')] })),
       bgGroup(ro),
-      group('模型', ...genRows(c.gen, ro)),
-      // 看的时候：日记、备忘录、线下的入口；改的时候：删聊天记录、删角色
+      // 看的时候：日记、备忘录、线下的入口；改的时候：删聊天记录、隔断记忆、删角色
       !isNew && ro ? group('', row({ label: '日记', icon: 'book', onclick: () => openApp('diary', { char: c.id }) }),
         row({ label: '他记得的关于你的事', icon: 'note', onclick: () => openApp('memo', { char: c.id }) }),
         row({ label: '线下见面', icon: 'door', onclick: () => { const st = D.storiesOf().find((s) => s.char === c.id); openApp('offline', st ? { story: st.id } : { newFor: c.id }); } })) : null,
       !isNew && !ro ? group('',
         // 只删聊天记录，日记、备忘录都留着（要删去它们自己的页面里删）。点了直接删；删完这一行就没了
         D.msgs(c.id).length ? row({ label: '删除聊天记录', cls: 'danger center', chev: false, onclick: (e) => { CS.clearChat(c.id); e.currentTarget.remove(); } }) : null,
+        // 隔断记忆：聊天里出一条线，他回消息只看线下面的（线上面的还在、能翻；还没写进日记的照样会写）。点了这一行就没了，等有新消息再出来
+        D.msgs(c.id).length && !D.isCut(D.msgs(c.id).at(-1)) ? row({ label: '隔断记忆', cls: 'center', chev: false, onclick: (e) => { CS.cutMemory(c.id); e.currentTarget.remove(); toast('隔断了'); } }) : null,
         row({ label: '删除这个角色', cls: 'danger center', chev: false, onclick: async () => {
           if (!(await confirm('删除角色？', `${D.nameOf(c)} 的聊天、日记、备忘录、动态、线下剧情都会一起删掉，不能恢复。`, '删除', true))) return;
           D.removeChar(c.id);

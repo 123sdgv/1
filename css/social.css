@@ -59,6 +59,11 @@
 .ch-older { margin: 4px auto 10px; font-size: 13px; color: var(--ink-2); padding: 6px 12px; }
 .ch-time { align-self: center; margin: 14px auto 8px; font-size: 12px; color: var(--ink-3); }
 .ch-note { align-self: center; margin: 6px auto; max-width: 80%; padding: 3px 10px; border-radius: 6px; background: rgba(0,0,0,.05); font-size: 12px; color: var(--ink-2); text-align: center; }
+/* 隔断记忆：只有一条横线（线上面的他不看了）。上下留点高度好长按 */
+.ch-cut { position: relative; height: 22px; margin: 10px 18px; border-radius: 6px; -webkit-touch-callout: none; }
+.ch-cut::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--ink-3); opacity: .6; }
+.ch-cut.pressed { background: rgba(0,0,0,.05); }
+.chat.has-bg .ch-cut::before { background: var(--ink-2); opacity: .7; }
 .rec { display: flex; flex-direction: column; }
 .ln { display: flex; align-items: flex-start; gap: 9px; padding: 4px 12px; }
 .rec.me .ln { justify-content: flex-end; }

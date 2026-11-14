@@ -125,7 +125,7 @@ export async function turn(id) {
   const asks = [];
   try {
     const gen = D.genOf(c);
-    const text = stripThink(await chat(C.buildGame(c, g), { signal: ctrl.signal, temperature: gen.temperature, max_tokens: Math.max(1500, gen.maxTokens), stream: false }));
+    const text = stripThink(await chat(C.buildGame(c, g), { signal: ctrl.signal, temperature: gen.temperature, stream: false }));
     let first = true;
     for (const line of text.split('\n')) {
       const p = parseLine(line);
@@ -207,13 +207,13 @@ async function judgeLine(id, who, text) {
   } finally { judging.delete(id); D.emit('game', id); }
 }
 export async function hostSoup() {
-  const text = await chat([{ role: 'user', content: T.soupHostPrompt() }], { temperature: 1, max_tokens: 900, stream: false });
+  const text = await chat([{ role: 'user', content: T.soupHostPrompt() }], { temperature: 1, stream: false });
   const j = parseJSON(text);
   if (!j?.face || !j?.bottom) throw new Error('再试一次');
   return { title: String(j.title || '').slice(0, 20), face: String(j.face), bottom: String(j.bottom), keys: (j.keys || []).map(String).slice(0, 6) };
 }
 async function judge(soup, history, who, text) {
-  const out = await chat([{ role: 'user', content: T.soupJudgePrompt({ soup, history, who, text }) }], { temperature: 0.2, max_tokens: 300, stream: false });
+  const out = await chat([{ role: 'user', content: T.soupJudgePrompt({ soup, history, who, text }) }], { temperature: 0.2, stream: false });
   const j = parseJSON(out) || {};
   return { kind: ['ask', 'guess', 'giveup', 'chat'].includes(j.kind) ? j.kind : 'chat', answer: String(j.answer || '').slice(0, 12), solved: !!j.solved };
 }

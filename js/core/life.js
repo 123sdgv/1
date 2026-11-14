@@ -14,12 +14,12 @@ import { musicTick } from './music.js';
 const MIN = 60000, HOUR = 60 * MIN;
 const rand = (a, b) => a + Math.random() * (b - a);
 // 后台的事也按这个角色自己的温度来
-// Token 上限要给够：推理模型（比如 DeepSeek 的思考模式）先想的那段也算在里面，给少了还没开始写就用完了
-const ask = (msgs, max = 900, c = null, onEnd) => chat(msgs, { stream: false, max_tokens: max, temperature: c ? D.genOf(c).temperature : 0.9, onEnd });
+// Token 不限（不发 max_tokens）：推理模型（比如 DeepSeek 的思考模式）先想的那段也算 Token，给少了还没开始写就用完了
+const ask = (msgs, c = null, onEnd) => chat(msgs, { stream: false, temperature: D.genOf(c).temperature, onEnd });
 /** 要 JSON 的：没拿到就说清楚是哪种没成（截断 / 没回字 / 格式不对） */
-async function askJSON(msgs, max, c, what) {
+async function askJSON(msgs, c, what) {
   let why = '';
-  const text = await ask(msgs, max, c, (r) => { why = r; });
+  const text = await ask(msgs, c, (r) => { why = r; });
   const j = parseJSON(text);
   if (j) return { j, why };
   const bare = stripThink(text).trim();
@@ -53,7 +53,7 @@ async function runJob(m, job) {
   const c = D.charById(job.who);
   if (!c) return;
   if (job.kind === 'react') {
-    const j = parseJSON(await ask(C.buildReact(c, m), 1500, c)) || {};
+    const j = parseJSON(await ask(C.buildReact(c, m), c)) || {};
     const fresh = D.moments().find((x) => x.id === m.id);
     if (!fresh) return;
     if (j.like && !fresh.likes.includes(c.id)) fresh.likes.push(c.id);
@@ -69,7 +69,7 @@ async function runJob(m, job) {
     const fresh = D.moments().find((x) => x.id === m.id);
     const cm = fresh?.comments.find((x) => x.id === job.cid);
     if (!cm) return;
-    const j = parseJSON(await ask(C.buildReply(c, fresh, cm), 1500, c)) || {};
+    const j = parseJSON(await ask(C.buildReply(c, fresh, cm), c)) || {};
     if (j.reply && String(j.reply).trim()) {
       fresh.comments.push({ id: D.uid(), who: c.id, to: cm.who, text: String(j.reply).trim(), ts: Date.now() });
       if (cm.who === 'me') D.emit('notify', { moment: fresh.id, text: `${D.nameOf(c)}回复了你` });
@@ -114,7 +114,7 @@ export async function writeDiary(c, { force = false } = {}) {
   const since = ds.length ? ds[ds.length - 1].upto || ds[ds.length - 1].ts : 0;
   const log = C.diaryLog(c, since);
   if (!log.count) { if (force) throw new Error('上一篇日记之后还没发生什么'); return null; }
-  const { j, why } = await askJSON(C.buildDiary(c, log), Math.max(7000, D.genOf(c).maxTokens || 0), c, '日记');
+  const { j, why } = await askJSON(C.buildDiary(c, log), c, '日记');
   if (!String(j.diary || '').trim()) throw new Error(`这次日记没写成：${why === 'length' ? '写太长被截断了' : '回的不是要的格式'}，过会儿再试`);
   const d = { id: D.uid(), date: /^\d{4}-\d{2}-\d{2}$/.test(j.date || '') ? j.date : ymd(log.last), ts: Date.now(), upto: log.last, text: String(j.diary).trim(), inner: String(j.inner || '').trim(), keys: strs(j.keywords, 12) };
   D.setDiaries(c.id, [...D.diaries(c.id), d]);
@@ -172,7 +172,7 @@ export function timelineTodo(c, { now = false } = {}) {
 export async function writeTimeline(c, opt) {
   const todo = timelineTodo(c, opt);
   if (!todo) return null;
-  const { j } = await askJSON(todo.kind === 'week' ? C.buildWeek(c, todo.from, todo.to, todo.diaries) : C.buildMonth(c, todo.ym, todo.weeks), 4000, c, todo.kind === 'week' ? '周记' : '月记');
+  const { j } = await askJSON(todo.kind === 'week' ? C.buildWeek(c, todo.from, todo.to, todo.diaries) : C.buildMonth(c, todo.ym, todo.weeks), c, todo.kind === 'week' ? '周记' : '月记');
   const text = String(j?.summary || '').trim();
   if (!text) throw new Error('这次没整理成：回的不是要的格式，过会儿再试');
   const from = todo.kind === 'week' ? todo.from : todo.ym + '-01', to = todo.kind === 'week' ? todo.to : monthEnd(todo.ym);
@@ -183,7 +183,7 @@ export async function writeTimeline(c, opt) {
 
 // ── 角色发动态 ──
 export async function charPost(c) {
-  const j = parseJSON(await ask(C.buildPost(c), 2000, c));
+  const j = parseJSON(await ask(C.buildPost(c), c));
   if (!j || !String(j.text || '').trim()) return null;
   const m = D.saveMoment({ id: D.uid(), acc: c.acc, who: c.id, text: String(j.text).trim(), photos: (j.photos || []).map(String).filter(Boolean).slice(0, 9), ts: Date.now(), likes: [], comments: [], jobs: [] });
   for (const p of m.photos) D.addPhoto({ acc: c.acc, desc: p, who: c.id });

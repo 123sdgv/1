@@ -1,5 +1,5 @@
 // OpenAI 兼容接口：POST {地址}/chat/completions，能流式就流式
-import { api, settings } from './data.js';
+import { api } from './data.js';
 
 export class ApiError extends Error { constructor(msg, kind) { super(msg); this.kind = kind; } }
 
@@ -39,10 +39,12 @@ function errText(status, body) {
  */
 export const LIMIT = { timeout: 240000, idle: 60000 };
 export async function chat(messages, { onDelta, onAlive, onEnd, signal, temperature, max_tokens, stream = true, timeout = LIMIT.timeout, first, idle = LIMIT.idle } = {}) {
-  const cfg = api(), st = settings();
+  const cfg = api();
   const url = endpoint(cfg.base);
   if (!url || !cfg.model) throw new ApiError('还没填 API：去 设置 → API 填地址和模型', 'config');
-  const body = { model: cfg.model, messages, stream, temperature: temperature ?? st.temperature, max_tokens: max_tokens ?? st.maxTokens };
+  // Token 不限：没给 max_tokens 就不发，用接口自己的默认
+  const body = { model: cfg.model, messages, stream, temperature: temperature ?? 0.85 };
+  if (Number.isFinite(max_tokens) && max_tokens > 0) body.max_tokens = max_tokens;
   // 自己的 AbortController：外面停（signal）和超时都走它
   const ctrl = new AbortController();
   const outer = () => ctrl.abort();

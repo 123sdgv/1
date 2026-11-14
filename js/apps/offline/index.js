@@ -6,13 +6,12 @@ import { h, Stack, page, avatar, icon, btnIc, menu, toast, confirm, longPress, a
 import * as D from '../../core/data.js';
 import * as CS from '../../core/chat.js';
 import { short } from '../../core/time.js';
-import { genRows } from '../social/char.js';
 
 const whoOf = (st) => {
   if (st.char) { const c = D.charById(st.char); return { name: D.nameOf(c), avatar: c?.avatar }; }
   return { name: st.card?.name || '', avatar: null };
 };
-const blankCard = () => ({ name: '', persona: '', world: '', meName: '', me: '', gen: D.genOf({}) });
+const blankCard = () => ({ name: '', persona: '', world: '', meName: '', me: '' });
 
 export function mount(body, { close, arg }) {
   const stack = new Stack(body, close);
@@ -49,7 +48,7 @@ export function mount(body, { close, arg }) {
     const load = () => {
       const x = isNew ? { char: presetChar, title: '', scene: '', card: blankCard() } : structuredClone(D.stories().find((s) => s.id === sid) || old);
       if (!x.card) x.card = blankCard();
-      x.card.gen = D.genOf(x.card);
+      delete x.card.gen;
       return x;
     };
     let v = load(), editing = isNew, snap = JSON.stringify(v);
@@ -82,7 +81,7 @@ export function mount(body, { close, arg }) {
       const st = D.saveStory({ ...v, acc: c ? c.acc : null, card: c ? undefined : v.card, title: v.title || (c ? '见面' : v.card.name), id: v.id || D.uid(), createdAt: v.createdAt || Date.now(), lastTs: v.lastTs || Date.now() });
       v = structuredClone(st);
       if (!v.card) v.card = blankCard();
-      v.card.gen = D.genOf(v.card);
+      delete v.card.gen;
       snap = JSON.stringify(v);
       return st;
     }
@@ -104,8 +103,7 @@ export function mount(body, { close, arg }) {
         form.append(
           group('角色', inputRow({ label: '名字', value: cd.name, ro, live: true, onchange: (x) => { cd.name = x.trim(); } }), tRow('人设', () => cd.persona, (x) => { cd.persona = x; }, '角色人设')),
           group('我', inputRow({ label: '名字', value: cd.meName, ro, live: true, onchange: (x) => { cd.meName = x.trim(); } }), tRow('人设', () => cd.me, (x) => { cd.me = x; }, '我的人设')),
-          group('', tRow('世界观', () => cd.world, (x) => { cd.world = x; }), tRow('开场', () => v.scene, (x) => { v.scene = x; })),
-          group('模型', ...genRows(cd.gen, ro)));
+          group('', tRow('世界观', () => cd.world, (x) => { cd.world = x; }), tRow('开场', () => v.scene, (x) => { v.scene = x; })));
       }
       if (!isNew && editing) form.append(group('', row({ label: '删除这段', cls: 'danger center', chev: false, onclick: async () => {
         if (!(await confirm('删除这段线下剧情？', '', '删除', true))) return;

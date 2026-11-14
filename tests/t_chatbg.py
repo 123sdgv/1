@@ -20,7 +20,7 @@ async def main(size):
         await (await fc.value).set_files(img); await asyncio.sleep(1)
         await ph.shot(f'chatbg_crop_{size[0]}')
         await ph.page.locator('.cr-head button.main').click(); await asyncio.sleep(0.6)
-        check(await ph.top('.cb-pre.on').count() == 1 and await ph.top('.slide-row').count() >= 6, '选好了：预览 + 大小·模糊·淡')
+        check(await ph.top('.cb-pre.on').count() == 1 and await ph.top('.slide-row').count() == 3, '选好了：预览 + 大小·模糊·淡')
         # 调滑条：淡 60%
         sl = ph.top('.slide-row', ).filter(has_text='淡').locator('input')
         await sl.evaluate("(r) => { r.value = 60; r.dispatchEvent(new Event('input')); }")

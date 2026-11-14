@@ -217,6 +217,12 @@ export function openChat(ctx, cid, { at = null } = {}) {
     const parts = D.partsOf(r);
     if (r.role === 'note') {
       wrap.append(...parts.map((p, i) => {
+        // 隔断记忆：只有一条线。长按能删掉（删了就不隔断了）
+        if (p.t === 'cut') {
+          const ln = h('div', { class: 'ch-cut', 'aria-label': '隔断记忆' });
+          if (!sel) longPress(ln, (e) => popbar(ln, [['trash', () => CS.removeParts(cid, (x, k) => x === r && k === i), '删除']], e ? { x: e.clientX, y: e.clientY } : null));
+          return ln;
+        }
         if (p.t !== 'soup') return h('div', { class: 'ch-note', text: p.text });
         // 一起猜的海龟汤：出题人出的，放在中间
         const card = soupCard(p);

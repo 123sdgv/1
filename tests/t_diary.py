@@ -71,7 +71,7 @@ async def main(size):
         check(len(ds) == 4 and ds[-1]['text'] == '她说"晚安"。\n\n我想了很久。', f'JSON 不规矩也收下了：{ds[-1]["text"]!r}')
         check((await cur_text(ph)).startswith('她说'), '写好了翻到新的那篇')
         calls = [c for c in ph.api.calls if '写一篇日记' in json.dumps(c, ensure_ascii=False)]
-        check(calls and calls[-1].get('max_tokens', 0) >= 7000, f'日记的 Token 上限给够：{calls and calls[-1].get("max_tokens")}')
+        check(calls and 'max_tokens' not in calls[-1] and calls[-1].get('temperature') == 0.85, f'日记：Token 不限、温度 0.85：{calls and calls[-1].get("max_tokens")}')
         # 被截断（还没写就没了）：说清楚
         await ph.page.evaluate("__xsj.D.setMsgs('c0', [...__xsj.D.msgs('c0'), { id: 'm2', role: 'me', ts: Date.now(), alts: [[{ t: 'text', text: '早' }]], cur: 0 }])")
         ph.api.script = lambda b: [('finish', 'length')]

@@ -60,7 +60,8 @@ function weather(el, size) {
 
 // 日程：今天的（没打勾的在前）+ 往后的。每件前面一个小圆圈，点一下打勾（data-ck 由 home.js 处理）
 const daysTo = (date) => Math.round((new Date(date + 'T00:00:00') - new Date(ymd() + 'T00:00:00')) / 86400000);
-const agenda = (n) => D.upcoming(60).slice(0, n);
+// 接下来的几件（不管隔多远，放得下几条就放几条）
+const agenda = (n) => D.upcoming().slice(0, n);
 const whenText = (at) => { const n = daysTo(at); return n === 0 ? '今天' : n === 1 ? '明天' : n === 2 ? '后天' : n + ' 天后'; };
 function agendaEl(items, size) {
   if (!items.length) return h('div', { class: 'wg-ag none', text: '没有日程' });

@@ -84,7 +84,7 @@ export async function read(rec, { onText, signal, part = '' } = {}) {
   let got = '', why = '';
   try {
     await chat(msgs, {
-      signal, ...LIMITS, temperature: Math.min(1, g.temperature), max_tokens: Math.max(7000, g.maxTokens),
+      signal, ...LIMITS, temperature: g.temperature,
       onEnd: (r) => { why = r; },
       onDelta: (_, all) => { got = stripThink(all); onText && onText(join2(got)); },
     });
@@ -165,7 +165,7 @@ async function talk(id) {
   let err = null;
   try {
     await chat(msgs, {
-      signal: job.ctrl.signal, ...LIMITS, temperature: Math.min(1, g.temperature), max_tokens: Math.max(2000, g.maxTokens),
+      signal: job.ctrl.signal, ...LIMITS, temperature: g.temperature,
       onDelta: (_, all) => { job.text = stripThink(all); D.emit('tarotChat', id); },
     });
   } catch (e) { if (e.name !== 'AbortError') err = e; }
