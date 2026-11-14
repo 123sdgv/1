@@ -3,7 +3,7 @@
 // 要是还在锁屏上（刚打开 15 秒内），马上换、整页重新载入一下；已经在用了就等下次打开。
 // 下面 VERSION 和 FILES 是 tests/stamp.py 按文件内容算出来写的，推之前跑一下（测试脚本也会自动跑），别手改。
 // <stamp>
-const VERSION = '8c7a8ecd5b';
+const VERSION = 'c190e7d232';
 const FILES = [
   'index.html',
   'manifest.webmanifest',

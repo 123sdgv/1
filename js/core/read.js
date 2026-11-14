@@ -147,7 +147,7 @@ export function nextOf(b, rd) {
 export const finished = (b, rd) => { const chs = D.chapters(b.id); return chs.length > 0 && chs.every((ch) => (rd.read || []).includes(ch.id)); };
 
 // ── 你写段评 ──
-/** 你写一条（to = 回复哪条）。回的是他：过一会儿他可能回你；直接写在某段下面：读过这章的人可能会来看看（最多两个） */
+/** 你写一条（to = 回复哪条）。回的是他：过一会儿他可能回你（不一定回，话说到头了就不回）；直接写在某段下面：读过这章的人可能会来看看（最多两个） */
 export function addMyComment(bid, { ch, p, to = null, text }) {
   const all = D.bookCmts(bid);
   const cm = { id: D.uid(), ch, p, who: 'me', to, text, ts: Date.now() };
@@ -155,7 +155,7 @@ export function addMyComment(bid, { ch, p, to = null, text }) {
   const target = to && all.find((x) => x.id === to);
   const jobs = [];
   if (target) {
-    if (target.who !== 'me' && D.charById(target.who)) jobs.push({ book: bid, who: target.who, cm: cm.id, kind: 'reply', due: Date.now() + rand(0.5, 3) * MIN });
+    if (target.who !== 'me' && D.charById(target.who) && Math.random() < 0.8) jobs.push({ book: bid, who: target.who, cm: cm.id, kind: 'reply', due: Date.now() + rand(0.5, 3) * MIN });
   } else {
     const rd = D.readers(bid);
     const seen = Object.keys(rd).filter((cid) => D.charById(cid) && (rd[cid].read || []).includes(ch)).sort(() => Math.random() - 0.5).slice(0, 2);

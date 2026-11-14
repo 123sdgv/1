@@ -30,6 +30,9 @@
 .bk-rd-it small { font-size: 11.5px; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bk-rd-it .dots3 { height: 16px; color: var(--ink-2); }
 .bk-rd-it .dots3 i { width: 4px; height: 4px; }
+.bk-rd-plus { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 0 0 1.2px var(--line); color: var(--ink-2); background: rgba(255,255,255,.6); }
+.bk-rd-plus .ic { width: 18px; height: 18px; }
+.bk-rd-add small { height: 14px; }
 .av.now { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--ink); animation: rdpulse 1.4s infinite; }
 @keyframes rdpulse { 50% { opacity: .55; } }
 .toc { margin: 0 16px 22px; background: var(--card); border-radius: 14px; overflow: hidden; }

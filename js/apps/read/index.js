@@ -6,7 +6,7 @@ import { h, Stack, page, avatar, icon, btnIc, toast, confirm, ask, longPress, au
 import * as D from '../../core/data.js';
 import * as R from '../../core/read.js';
 import { hm, ago } from '../../core/time.js';
-import { bookCover } from '../shared.js';
+import { bookCover, pickChar } from '../shared.js';
 import { openApp } from '../../phone/window.js';
 
 const meName = () => D.curAccount().name || '我';
@@ -79,8 +79,10 @@ export function mount(body, { close, arg }) {
         h('div', { class: 'bk-info' }, h('h2', { text: b.title }),
           h('small', { text: chs.length ? `${chs.length} 章 · ${wan(wordsOf(chs))}` : '' }),
           chs.length ? h('button', { class: 'btn bk-go', text: i >= 0 ? `继续读 · 第 ${i + 1} 章` : '开始读', onclick: () => openReader(bid) }) : null)));
+      // 一起读的人：头像一排，最后一个 ＋ 邀请（这个身份里还没加入的角色）。邀请只在这里（聊天里的「一起读」删了）
       const rd = D.readers(bid), ids = Object.keys(rd).filter((id) => D.charById(id));
-      if (ids.length) {
+      const canAdd = D.chars().some((c) => !rd[c.id]);
+      if (ids.length || canAdd) {
         const nw = R.readingNow();
         p.scroll.append(h('div', { class: 'bk-rd' }, ids.map((cid) => {
           const c = D.charById(cid), r = rd[cid];
@@ -88,7 +90,8 @@ export function mount(body, { close, arg }) {
           const st = r.review ? '读完了' : busy ? '' : `${(r.read || []).length} / ${chs.length}`;
           return h('button', { class: 'bk-rd-it', onclick: () => readerSheet(bid, cid) }, avatar(c.avatar, D.nameOf(c), 'sm' + (busy ? ' now' : '')),
             busy ? h('span', { class: 'dots3' }, h('i'), h('i'), h('i')) : h('small', { text: st }));
-        })));
+        }), canAdd ? h('button', { class: 'bk-rd-it bk-rd-add', 'aria-label': '邀请一起读', onclick: () => pickChar('一起读', (c) => R.join(bid, c.id), (c) => !D.readers(bid)[c.id]) },
+          h('span', { class: 'bk-rd-plus', html: icon('plus') }), h('small', { text: '' })) : null));
       }
       p.scroll.append(group('', toggleRow({ label: '完结', value: b.done, onchange: (v) => { D.saveBook({ ...D.bookById(bid), done: v }); if (v) R.kick(); } })));
       if (!chs.length) p.scroll.append(h('div', { class: 'empty' }, h('b', { text: '还没有章节' })));

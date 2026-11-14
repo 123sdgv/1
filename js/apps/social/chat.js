@@ -10,7 +10,6 @@ import { sep, md } from '../../core/time.js';
 import { fmtYuan, makeVoice, quoteText } from '../../core/parse.js';
 import * as CS from '../../core/chat.js';
 import { photoTile, imgTile, albumTile, viewPhoto, fwdCard, bookCover } from '../shared.js';
-import { join as joinBook } from '../../core/read.js';
 import * as G from '../../core/game.js';
 import { editChar } from './char.js';
 import { stickerSheet } from './stickers.js';
@@ -352,20 +351,7 @@ export function openChat(ctx, cid, { at = null } = {}) {
       tile('photo', '相册', () => { s.close(); pickPhoto(); }),
       tile('camera', '拍照', async () => { s.close(); const v = await textSheet('拍照'); if (v) sendParts([{ t: 'photo', desc: v }]); }),
       tile('mic', '语音', async () => { s.close(); const v = await textSheet('语音'); if (v) sendParts([makeVoice(v)]); }),
-      tile('pay', '转账', () => { s.close(); transfer(); }),
-      tile('book', '一起读', () => { s.close(); pickBook(); })) });
-  }
-  // 从书架挑一本发给他：他就加入一起读（core/read.js）
-  function pickBook() {
-    const list = D.booksOf();
-    const body = h('div', { class: 'pick-list' });
-    const s = sheet({ title: '一起读', body });
-    if (!list.length) body.append(h('div', { class: 'empty', text: '书架是空的' }));
-    for (const b of list) {
-      const n = D.chapters(b.id).length;
-      body.append(h('button', { class: 'pick-it', onclick: () => { s.close(); joinBook(b.id, cid); sendParts([{ t: 'book', book: b.id, title: b.title }]); } },
-        bookCover(b.title, 'pick-cv', { mini: true }), h('div', {}, h('b', { text: b.title }), h('small', { text: n ? `${n} 章` : '' }))));
-    }
+      tile('pay', '转账', () => { s.close(); transfer(); })) });
   }
   const tile = (ic, name, fn) => h('button', { class: 'ch-tile', 'aria-label': name, onclick: fn }, h('span', { html: icon(ic) }));
   // 相册：第一格 ＋ 从手机里挑一张真图片（写一句给他看），后面是相册里的（挑了的不再存一遍）

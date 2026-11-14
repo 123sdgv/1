@@ -187,6 +187,7 @@ export function buildChat(c, { extra = null, uptoId = null, skipId = null, canSe
     T.recalledText(recalledOf(c, lastUserText(list))),
     T.activity(activityOf(c)),
     T.reading(readingOf(c)),
+    T.mentioned(mentionedOf(c, list)),
     T.gamesPlayed(gamesFor(c)),
     search ? T.searchResult({ me, ...search }) : '',
   ] }));
@@ -424,16 +425,47 @@ export function buildReadReview(c, b) {
   }) }];
 }
 
+/** 他在一起读的书里，聊天时会告诉他的那两本（最近读的在前） */
+const readingBooks = (c) => D.booksReadBy(c.id).filter((b) => b.acc === c.acc).sort((a, z) => (z.lastTs || 0) - (a.lastTs || 0)).slice(0, 2);
 /** 聊天时告诉他：在和你一起读哪本书、读到哪、最近的笔记、你最近写的段评（最多两本，最近读的在前） */
 function readingOf(c) {
   const acc = accOf(c), me = meName(acc);
-  return D.booksReadBy(c.id).filter((b) => b.acc === c.acc).sort((a, z) => (z.lastTs || 0) - (a.lastTs || 0)).slice(0, 2).map((b) => {
+  return readingBooks(c).map((b) => {
     const chs = D.chapters(b.id), rd = D.readers(b.id)[c.id];
     const read = chs.filter((ch) => rd.read?.includes(ch.id));
     const last = [...chs].reverse().find((ch) => rd.notes?.[ch.id]);
     const mine = D.bookCmts(b.id).filter((x) => x.who === 'me').slice(-2).map((x) => `「${cut(x.text, 60)}」`).join('');
     const where = rd.review ? `你们一起读完了，你写过阅读日记` : read.length ? `你读完了 ${read.length} 章（现在一共 ${chs.length} 章${b.done ? '，已完结' : '，还在更新'}），${me}翻到了第 ${Math.max(1, b.reach || 0)} 章` : `${me}刚邀请你一起读，你还没开始读（现在一共 ${chs.length} 章）`;
     return [`《${b.title}》：${where}。`, last && !rd.review ? `你最近的读书笔记：${cut(rd.notes[last.id], 200)}` : '', mine ? `${me}最近写的段评：${mine}` : ''].filter(Boolean).join(' ');
+  });
+}
+
+/**
+ * 最近几句里出现了《书名》（只认书名号，免得普通的词误触发），而且是这个身份书架上的书：告诉他这本书的简短情况——
+ * 你读到哪、你最近写的段评；他也在一起读就加上他读到哪、他的读书笔记。上面「你在读的书」已经说过的就不重复。
+ * 以后歌名（音乐 App）也走这套
+ */
+const TITLE_RE = /《([^《》\n]{1,40})》/g;
+const normTitle = (s) => String(s || '').replace(/\s/g, '').toLowerCase();
+function mentionedOf(c, list) {
+  const acc = accOf(c), me = meName(acc);
+  const recent = list.filter((r) => r.role !== 'note').slice(-6).map((r) => D.partsOf(r).map((p) => [p.text, p.desc, p.title].filter(Boolean).join(' ')).join(' ')).join('\n');
+  const titles = [...new Set([...recent.matchAll(TITLE_RE)].map((m) => normTitle(m[1])))];
+  if (!titles.length) return [];
+  const told = new Set(readingBooks(c).map((b) => b.id));
+  const books = D.books().filter((b) => b.acc === c.acc && !told.has(b.id) && titles.includes(normTitle(b.title)));
+  return books.slice(0, 2).map((b) => {
+    const chs = D.chapters(b.id), rd = D.readers(b.id)[c.id];
+    const reach = Math.min(chs.length, Math.max(0, b.reach || 0));
+    const where = reach ? `${me}读到第 ${reach} 章（一共 ${chs.length} 章${b.done ? '，已完结' : ''}）` : `${me}还没开始读（一共 ${chs.length} 章）`;
+    const mine = D.bookCmts(b.id).filter((x) => x.who === 'me').slice(-2).map((x) => `「${cut(x.text, 60)}」`).join('');
+    let his = '';
+    if (rd) {
+      const n = chs.filter((ch) => rd.read?.includes(ch.id)).length;
+      const last = [...chs].reverse().find((ch) => rd.notes?.[ch.id]);
+      his = rd.review ? '你们一起读完了。' : `你也在一起读，读完了 ${n} 章${last ? `，你最近的读书笔记：${cut(rd.notes[last.id], 200)}` : ''}。`;
+    }
+    return [`《${b.title}》是${me}在手机阅读 App 里读的书：${where}。`, mine ? `${me}最近写的段评：${mine}` : '', his].filter(Boolean).join(' ');
   });
 }
 

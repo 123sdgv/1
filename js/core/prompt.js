@@ -65,6 +65,8 @@ export function present({ me, timeText, gapText, weather, events }) {
 
 /** 他在读的书（聊天时放在会变的那段里） */
 export const reading = (lines) => (lines.length ? sec('你在读的书', list(lines)) : '');
+/** 聊天里最近提到了《书名》（只认书名号）：那本书的简短情况。以后歌名也放这里 */
+export const mentioned = (lines) => (lines.length ? sec('聊天里提到的书', list(lines)) : '');
 
 // ── 手机聊天 ──
 export function chatSystem({ c, me, identityText, memoryText, stickers, canMail, canSearch, canBook = false }) {
@@ -87,7 +89,7 @@ ${stickers.length ? `  [表情包 名字] —— 发一个表情包。只能用�
 ${canMail ? `  [邮件 主题] 然后另起几行写正文，最后单独一行写 [/邮件] —— 给${me}的邮箱发一封邮件（不会出现在聊天里），偶尔用，适合写长一点、正式一点的话
 ` : ''}${canSearch ? `  [搜索 关键词] —— 想知道最近发生的事、实时的消息，或者拿不准的事实，就只回这一行、别的都先别写；系统会把搜到的东西给你，你看完再回${me}
 ` : ''}- ${me}发来的 [图片] 就是一张真照片，按看到这张照片来回应；[语音] 就是${me}说话的声音；[聊天记录] 是${me}转发给你的一段别人的聊天。（撤回了一条消息）是${me}发了一条又撤回了，你没来得及看到内容。${canBook ? `
-- ${me}发来的 [书] 《书名》 是在邀请你一起读这本书：你们用手机上的阅读 App 一章一章读，可以在段落下面写段评。你读到哪、写了什么，参考里会告诉你；没读到的部分你不知道。` : ''}
+- 你和${me}在用手机上的阅读 App 一起读书：一章一章读，可以在段落下面写段评。你读到哪、写了什么，参考里会告诉你；没读到的部分你不知道。（以前${me}发来的 [书] 《书名》 是在邀请你一起读这本书。）` : ''}
 - 不要写时间，不要写名字前缀，不要用其他格式。${stickers.length ? '' : '现在没有表情包可以发。'}`),
   );
 }
@@ -279,7 +281,7 @@ export function readReplyPrompt({ c, me, identityText, memoryText, title, chNo, 
     memoryText,
     sec(`第 ${chNo} 章里的一段`, para),
     sec('这段下面的段评', thread),
-    kind === 'reply' ? `${who}刚刚回复了你：「${text}」。你要回吗？` : `${who}刚刚在这一段写了段评：「${text}」。你要回一句吗？`,
+    kind === 'reply' ? `${who}刚刚回复了你：「${text}」。你要回吗？话已经说到头了、只是应一声的，不回也很自然。` : `${who}刚刚在这一段写了段评：「${text}」。你要回一句吗？`,
     `只输出一个 JSON，不要任何别的文字：
 {"reply": "回复内容，一两句；不想回就留空字符串"}`,
   );
