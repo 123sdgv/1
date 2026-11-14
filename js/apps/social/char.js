@@ -1,6 +1,6 @@
-// 角色资料：新建 / 看 / 改。头像、名字、备注、人设（一行，点进去整页改）、认识谁、他的生活（开了才展开）、模型参数（滑条）、日记 / 备忘录 / 线下入口
+// 角色资料：新建 / 看 / 改。头像、名字、备注、人设（一行，点进去整页改）、认识谁、他的生活（开了才展开）、聊天背景（图 + 大小·模糊·淡）、模型参数（滑条）、日记 / 备忘录 / 线下入口
 // 平时只能看；右上角 ⭕ 点了才能改，变成 ✅，点 ✅ 问一句再存。改到一半要走也问一句。新建的一进来就能改。
-import { h, page, avatar, group, row, inputRow, textRow, toast, confirm, stepRow, slideRow, foldRow, icon, modeBtn, askSave, askLeave } from '../../core/ui.js';
+import { h, page, avatar, group, row, inputRow, textRow, toast, confirm, stepRow, slideRow, foldRow, icon, modeBtn, askSave, askLeave, $ } from '../../core/ui.js';
 import { pickCrop } from '../../core/crop.js';
 import * as D from '../../core/data.js';
 import { openApp } from '../../phone/window.js';
@@ -22,19 +22,23 @@ export function editChar(ctx, cid) {
     if (!x) return null;
     x.life = D.lifeOf(x);
     x.gen = D.genOf(x);
+    x.bg = D.chatBgOf(x);
     return x;
   };
   let c = load();
   if (!c) return;
+  // 聊天背景的图：改的时候先放在这里（undefined = 没动过），存的时候才写进 file.chatbg.<id>
+  let bgSrc;
+  const bgNow = () => (bgSrc === undefined ? D.file('chatbg.' + c.id) : bgSrc);
   let editing = isNew, snap = JSON.stringify(c);
-  const changed = () => JSON.stringify(c) !== snap;
+  const changed = () => JSON.stringify(c) !== snap || bgSrc !== undefined;
   const mode = modeBtn(() => (editing ? commit() : start()));
   mode.set(editing);
   const pg = page({ title: isNew ? '新建角色' : '资料', onBack: () => back(), right: mode });
   pg.el.classList.add('ce');
   const nav = { push: (p) => ctx.push(p), pop: () => ctx.stack.pop() };
 
-  function start() { editing = true; c = load(); snap = JSON.stringify(c); mode.set(true); draw(); }
+  function start() { editing = true; c = load(); bgSrc = undefined; snap = JSON.stringify(c); mode.set(true); draw(); }
   async function back() {
     document.activeElement?.blur();
     await tick();
@@ -57,6 +61,7 @@ export function editChar(ctx, cid) {
     const fresh = D.charById(c.id);
     if (fresh) for (const k of ['mail', 'knowMail', 'mailTried']) if (fresh[k] !== undefined) c[k] = fresh[k];
     delete c.net; delete c.sign; delete c.profileTried;
+    if (bgSrc !== undefined) { D.setFile('chatbg.' + c.id, bgSrc); bgSrc = undefined; }
     D.saveChar(c);
     snap = JSON.stringify(c);
     return true;
@@ -88,6 +93,7 @@ export function editChar(ctx, cid) {
         foldRow({ label: '自己写日记', value: L.diary, onchange: setL('diary'), ro, kids: [step('至少隔多久', 'diaryHours', 2, 72, 2, ' 小时')] }),
         foldRow({ label: '自己写信', value: L.mail, onchange: setL('mail'), ro, kids: [step('大概多久一封', 'mailDays', 1, 30, 1, ' 天')] }),
         foldRow({ label: '别打扰的时间', value: L.quiet, onchange: setL('quiet'), ro, kids: [step('从', 'quietFrom', 0, 23, 1, ' 点'), step('到', 'quietTo', 0, 23, 1, ' 点')] })),
+      bgGroup(ro),
       group('模型', ...genRows(c.gen, ro)),
       // 看的时候：日记、备忘录、线下的入口；改的时候：删聊天记录、删角色
       !isNew && ro ? group('', row({ label: '日记', icon: 'book', onclick: () => openApp('diary', { char: c.id }) }),
@@ -106,6 +112,31 @@ export function editChar(ctx, cid) {
     pg.el.classList.toggle('ro', ro);
     pg.scroll.scrollTop = top;
   };
+  // 聊天背景：左边一个小预览（跟聊天页一样的比例，滑条一动就跟着变），点它换图（裁成手机屏幕的比例），垃圾桶去掉。
+  // 有图才有三根滑条。只能看的时候没图就整组不出现
+  function bgGroup(ro) {
+    const src = bgNow();
+    if (ro && !src) return null;
+    const pre = h('button', { class: 'cb-pre' + (src ? ' on' : ''), disabled: ro, 'aria-label': '换聊天背景', onclick: async () => {
+      const dev = $('#device').getBoundingClientRect();
+      const r = await pickCrop({ aspect: dev.width / dev.height, width: 900, title: '聊天背景' });
+      if (r) { bgSrc = r.src; draw(); }
+    } }, src ? h('i') : h('span', { html: icon('image') }));
+    const paint = () => {
+      const b = c.bg;
+      pre.style.setProperty('--cbg', src ? `url("${src}")` : 'none');
+      pre.style.setProperty('--cbs', String(b.size / 100));
+      pre.style.setProperty('--cbb', (b.blur * 60) / 393 + 'px'); // 预览小，模糊按比例缩
+      pre.style.setProperty('--cbv', String(b.veil));
+    };
+    paint();
+    const set = (k, f = (v) => v) => (v) => { c.bg = { ...c.bg, [k]: f(v) }; paint(); };
+    return group('聊天背景',
+      h('div', { class: 'row cb-row' }, pre, src && !ro ? h('button', { class: 'rs-x', 'aria-label': '去掉聊天背景', html: icon('trash'), onclick: () => { bgSrc = null; draw(); } }) : null),
+      src ? slideRow({ label: '大小', value: c.bg.size, min: 100, max: 300, step: 5, fmt: (v) => v + '%', onchange: set('size'), ro }) : null,
+      src ? slideRow({ label: '模糊', value: c.bg.blur, min: 0, max: 30, step: 1, fmt: (v) => String(v), onchange: set('blur'), ro }) : null,
+      src ? slideRow({ label: '淡', value: Math.round(c.bg.veil * 100), min: 0, max: 95, step: 1, fmt: (v) => v + '%', onchange: set('veil', (v) => v / 100), ro }) : null);
+  }
   draw();
   ctx.push({ el: pg.el, guard: () => editing && changed(), onBack: back });
 }

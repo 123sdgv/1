@@ -38,6 +38,19 @@
 
 /* 聊天页 */
 .chat { background: #F2F2F0; }
+/* 聊天背景（每个角色一张）：图放大 --cbs、模糊 --cbb，上面盖一层底色，--cbv 越大越淡 */
+.ch-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; display: none; }
+.chat.has-bg .ch-bg { display: block; }
+.ch-bg::before, .cb-pre.on i::before { content: ''; position: absolute; inset: -32px; background: var(--cbg) center / cover no-repeat; transform: scale(var(--cbs, 1)); filter: blur(var(--cbb, 0px)); }
+.ch-bg::after, .cb-pre.on i::after { content: ''; position: absolute; inset: 0; background: #F2F2F0; opacity: var(--cbv, .25); }
+.chat.has-bg .scroll { position: relative; z-index: 1; background: transparent; }
+.chat.has-bg .ch-foot { position: relative; z-index: 2; }
+.chat.has-bg .bar { background: color-mix(in srgb, #F2F2F0 72%, transparent); }
+.cb-row { gap: 12px; padding-top: 12px; padding-bottom: 12px; }
+.cb-pre { position: relative; width: 60px; height: 130px; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #fff; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-2); flex: none; }
+.cb-pre .ic { width: 24px; height: 24px; }
+.cb-pre.on i { position: absolute; inset: 0; overflow: hidden; }
+.cb-pre.on i::before { inset: -6px; }
 .ch-ttl { display: flex; flex-direction: column; align-items: center; min-width: 0; }
 .ch-sub { font-size: 11px; color: var(--ink-2); height: 14px; line-height: 14px; margin-top: -1px; }
 .ch-sub:empty { height: 0; }

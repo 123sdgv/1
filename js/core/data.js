@@ -113,7 +113,7 @@ export function saveChar(c) {
 }
 export function removeChar(id, quiet) {
   S.set('chars', allChars().filter((c) => c.id !== id).map((c) => ({ ...c, knows: (c.knows || []).filter((k) => k !== id) })));
-  for (const k of ['msgs.', 'diary.', 'memo.', 'timeline.']) S.del(k + id);
+  for (const k of ['msgs.', 'diary.', 'memo.', 'timeline.', 'file.chatbg.']) S.del(k + id);
   const m = S.get('chatmeta', {}); delete m[id]; S.set('chatmeta', m);
   S.set('moments', moments().filter((x) => x.who !== id).map((x) => ({ ...x, likes: x.likes.filter((w) => w !== id), comments: x.comments.filter((c) => c.who !== id), jobs: (x.jobs || []).filter((j) => j.who !== id) })));
   for (const st of stories().filter((s) => s.char === id)) removeStory(st.id, true);
@@ -364,6 +364,8 @@ export const booksReadBy = (cid) => books().filter((b) => readers(b.id)[cid]);
 export const bookJobs = () => S.get('bookJobs', []);
 export function setBookJobs(arr) { S.set('bookJobs', arr); }
 // 阅读页的样子（所有书共用）：背景图在 file.readBg；size 背景放大多少（%）、blur 模糊、veil 盖在图上的那层多淡（0～1）、font 字号
+/** 聊天背景（每个角色一张）：图在 file.chatbg.<角色id>，大小 / 模糊 / 淡存在角色的 bg 里 */
+export const chatBgOf = (c) => ({ size: 100, blur: 0, veil: 0.25, ...(c?.bg || {}) });
 export const readConf = () => ({ size: 100, blur: 0, veil: 0.72, font: 19, ...S.get('readConf', {}) });
 export function setReadConf(patch) { S.set('readConf', { ...readConf(), ...patch }); emit('readConf'); }
 

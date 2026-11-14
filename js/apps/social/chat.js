@@ -26,6 +26,18 @@ export function openChat(ctx, cid, { at = null } = {}) {
   const sub = h('small', { class: 'ch-sub' });
   const moreBtn = btnIc('more', () => editChar(ctx, cid), '资料');
   const pg = page({ title: '', cls: 'chat', onBack: () => ctx.stack.pop(), right: [moreBtn] });
+  // 聊天背景（角色资料里设）：一层在最底下，大小、模糊、上面盖一层多淡
+  const bgEl = h('div', { class: 'ch-bg' });
+  pg.el.prepend(bgEl);
+  function applyBg() {
+    const c = D.charById(cid), src = D.file('chatbg.' + cid), b = D.chatBgOf(c);
+    pg.el.classList.toggle('has-bg', !!src);
+    pg.el.style.setProperty('--cbg', src ? `url("${src}")` : 'none');
+    pg.el.style.setProperty('--cbs', String(b.size / 100));
+    pg.el.style.setProperty('--cbb', b.blur + 'px');
+    pg.el.style.setProperty('--cbv', String(b.veil));
+  }
+  applyBg();
   const ttl = pg.head.querySelector('.ttl');
   const tbox = h('div', { class: 'ch-ttl' });
   ttl.before(tbox);
@@ -415,7 +427,7 @@ export function openChat(ctx, cid, { at = null } = {}) {
     sendParts([{ t: 'pay', amount: Math.round(n * 100) / 100, note: nt.value.trim(), state: 'wait' }]);
   }
 
-  const offs = [D.on('msgs', (id) => id === cid && draw()), D.on('typing', (id) => id === cid && draw()), D.on('chars', draw), D.on('account', draw), D.on('stickers', draw),
+  const offs = [D.on('chars', applyBg), D.on('file', (k) => k === 'chatbg.' + cid && applyBg()), D.on('msgs', (id) => id === cid && draw()), D.on('typing', (id) => id === cid && draw()), D.on('chars', draw), D.on('account', draw), D.on('stickers', draw),
     D.on('searchfail', (x) => x.cid === cid && toast('没搜成：' + x.msg))];
   ctx.push({ el: pg.el, onShow: () => CS.setViewing(cid), onHide: () => CS.setViewing(null), onDestroy: () => { CS.setViewing(null); offs.forEach((f) => f()); } });
   CS.setViewing(cid);
