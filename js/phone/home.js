@@ -567,7 +567,8 @@ function addSheet() {
     def.render(prev.firstChild, 's', {}, '');
     body.append(h('button', { class: 'wg-pick-it', onclick: () => {
       const key = 'w:' + D.uid();
-      const [w, hh] = def.sizes.find(([a, b]) => a === 4 && b === 2) || def.sizes[0];
+      // 新加的先用最小的（都是 2×2），要大自己拖角；大的容易把这页挤满、被挤到后面的页
+      const [w, hh] = def.sizes.reduce((m, s) => (s[0] * s[1] < m[0] * m[1] ? s : m));
       layout.widgets[key] = { type, w, h: hh };
       // 放在这一页第一个放得下的空位；这页满了就往后找，都满了加一页
       const p = placeNew(layout, key, page);
