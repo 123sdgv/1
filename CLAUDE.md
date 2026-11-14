@@ -89,10 +89,11 @@ js/apps/tarot/          塔罗：列表（左滑 × 删）→ ＋ 写问题、�
 js/apps/game/           游戏：盒子（你画我猜、海龟汤两张卡）+ 下面玩过的（左滑 × 删）。点一张 → 半屏：上面选怎么玩（我来画 / 他来画，他出题 / 一起猜），下面点陪你玩的角色 → 一局。
                         一局的页面：上面一块（画板 + 「画的是」/ 画（吸在顶上，键盘起来变小）/ 汤面卡片，玩完才露答案、汤底），下面你们说的话（出题人、结果是一行小字），最底下输入框。
                         右上角：玩着 = 旗子（不猜了 / 公布答案，先问一句）；玩完 = 再来一局（同一个人、同一种玩法）。我来画、还没画就走了，那局不留
-js/apps/shared.js       文字照片、看照片、选角色、转发的聊天记录卡片、书的封面（按书名算深灰，书名竖着写）
+js/apps/shared.js       文字照片、真图片的格子（imgTile / albumTile）、看照片（真图片下面是那句，能原地改）、选角色、转发的聊天记录卡片、书的封面（按书名算深灰，书名竖着写）
 js/apps/social/         index（三个标签页，底栏只有图标）list（搜索框 + 消息，左滑蓝色置顶，没有长按菜单）chat（聊天页；第六版在聊天里玩过的画、海龟汤、邀请卡片还照样显示，新的不会再有）
                         char（角色资料：平时只能看，⭕ 点了才能改 → ✅ 问一句再存，改到一半要走问一句；人设是一行、点进去整页；看的时候有日记/备忘录/线下入口，改的时候才有删聊天记录、删角色）
                         moments（动态、就地写评论；长按名字/正文/图 → 编辑·删除，你的和他的都行，原地改正文和每张图的字）me（我的、邮箱、我的人设 / 世界观是一行点进去整页、切换身份）stickers（表情包面板，长按改说明是原地改）
+js/apps/album/          相册：文字照片和真图片都在；左上角 ☰ 角色名单 → 点一个人 = 你们俩之间的（他发的、你在跟他的聊天里发的）；＋ 自己拍一张文字照片；长按 编辑画面·删除（不影响聊天）
 js/apps/mail/           邮箱（收件箱 / 已发送 / 草稿 / 回收站、写信、读信）
 js/apps/read/           阅读：书架（长按封面 改名·删除）→ 一本书（开始/继续读、一起读的人、完结、目录，长按一章 改·删）→ 加一章（能从 .txt 导，GBK 也行）
                         → 读（段尾气泡 = 几条段评，黑的 = 他新写的还没看；点气泡 / 长按一段 → 半屏段评；Aa = 背景图·大小·模糊·淡·字号；章末 上一章·目录·下一章）
@@ -104,7 +105,7 @@ js/apps/read/           阅读：书架（长按封面 改名·删除）→ 一�
 |---|---|
 | `accounts` / `curAcc` | 身份（像 QQ 的多个号）：名字、头像、签名、人设、世界观、动态封面、`mail`（邮箱 @ 前面的部分，一个身份一个）。角色、聊天、动态、日记、相册、邮件、线下都按身份分开 |
 | `chars` | 角色：`acc` 属于哪个身份、名字、昵称（备注，显示用 `D.nameOf` = 备注 > 名字）、头像、人设、`knows` 认识谁、`life` 他的生活（来找你、发动态、写日记、写信 `mail/mailDays`、别打扰 `quiet/quietFrom/quietTo`；`D.lifeOf(c)` 取）、`gen` 模型参数（温度、Token 上限、上下文条数；`D.genOf(c)` 取，缺的用老的全局设置补）、`mail` 他自己起的邮箱名（界面上不显示，他不一定告诉你）、`knowMail` 他知道的你的邮箱。网名/签名删掉了（gray 定的） |
-| `msgs.<角色id>` | 聊天记录：`{ role: me/them/note, ts, alts: [[部件…]…], cur }`。一条角色回复是一组气泡；重新生成就在 `alts` 里多一个版本，左右翻。部件：text、voice（text/sec，没有语气了）、sticker（name）、photo、pay、event、note、recall（撤回了的：`{ by: me/them, was: 原来的部件 }`，界面上只有一行小字）、fwd（合并转发的聊天记录 `{title, items:[{name,text}]}`）、book（你发给他的书 `{book, title}`，发了他就加入一起读），text 和 voice 可以带 `quote: {who, text}`；老存档的 red 按转账显示 |
+| `msgs.<角色id>` | 聊天记录：`{ role: me/them/note, ts, alts: [[部件…]…], cur }`。一条角色回复是一组气泡；重新生成就在 `alts` 里多一个版本，左右翻。部件：text、voice（text/sec，没有语气了）、sticker（name）、photo（文字照片 desc）、img（真图片 `{file, desc, w, h}`，只有你能发）、pay、event、note、recall（撤回了的：`{ by: me/them, was: 原来的部件 }`，界面上只有一行小字）、fwd（合并转发的聊天记录 `{title, items:[{name,text}]}`）、book（你发给他的书 `{book, title}`，发了他就加入一起读），text 和 voice 可以带 `quote: {who, text}`；老存档的 red 按转账显示 |
 | `chatmeta` | 每个对话：未读、`pinned`（置顶的时间，先置顶的排前面；老存档是 true）、最后时间、`lastAway`、`nextPost`、`nextMail` |
 | `moments` | 动态：正文、配图描述、`fwd`（转发来的聊天记录）、点赞、评论（`to` = 回复谁，`photos` 评论带的图）、`jobs`（还没到时间的角色反应） |
 | `mails` / `mailJobs` | 邮件 `{ acc, box: inbox/sent/draft/trash, was（进回收站前在哪）, from, fromName, to, subject, body, ts, read, char }`；还没到时间的回信 `{ who, mail, due }`。地址都是 `名字@ph.com` |
@@ -113,7 +114,7 @@ js/apps/read/           阅读：书架（长按封面 改名·删除）→ 一�
 | `memo.<角色id>` | 备忘录 = 他记得的关于你的事，每次聊天都带上（`auto` = 他记的，没有 = 你亲手写的）；写日记时模型按编号增删、合并重复的 |
 | `events` | 日历（整台手机共用，`yearly` 每年重复，`done` 打过勾的日期，`by` 哪个角色记的）。`D.upcoming(天数)` 拿接下来的 |
 | `stickers` | 表情包（所有身份、所有角色共用）：`{ id, name（这张什么意思）, src }`。角色按名字发，`D.stickerByName` 找图 |
-| `photos` | 相册：照片只有文字描述 |
+| `photos` | 相册 `{ id, acc, desc, who（谁拍的：me / 角色id）, char（在跟谁的聊天里发的）, file（真图片的键）, w, h, ts }`。文字照片只有 desc；真图片的图存在 `file.img.<id>`，desc 是 gray 写的那句（模型看不见图，只读这句；没写就是「一张照片，没说拍的是什么」）。图聊天和相册共用一份，两边都不用了才删（`D.gcImages`，删聊天 / 删相册 / 删角色后跑）。老存档你发的文字照片没记 char，打开相册时 `fixPhotoChars` 按聊天记录补 |
 | `stories` / `story.<id>` | 线下剧情，记录结构和聊天一样，部件只有 text。两种：`char` 有值 = 和社交里的角色见面（带他的人设、你的人设、世界观、记忆、最近聊天）；`char` 空 = 自己写的一段，设定在 `card {name, persona, world, meName, me, gen}`，`acc` 也空（哪个身份下都看得到） |
 | `books` | 书 `{ id, acc, title, done（完结）, reach（你翻到过第几章，从 1 数）, pos: {ch, y}（读到哪章、滚到的比例）, createdAt, lastTs }`，按身份分开 |
 | `bookch.<书id>` | 章节 `[{ id, title, paras: [{id, text}], ts }]`，一次上传一章；一行一段，太长没换行的按句子切 |

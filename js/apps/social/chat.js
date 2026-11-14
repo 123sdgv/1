@@ -4,12 +4,12 @@
 // 多选：每条前面一个圆圈，一次删掉或者合并转发（到动态、或者别的角色）。
 // 你发完消息他会自动回（core/chat.js 的 autoReply），不用点按钮。
 // 一起玩的小游戏在游戏 App 里（apps/game）；第六版在聊天里玩过的画、海龟汤还照样显示，长按没揭晓的汤 = 翻开汤底。
-import { h, page, avatar, icon, btnIc, menu, toast, longPress, autosize, sheet, popbar, confirm } from '../../core/ui.js';
+import { h, page, avatar, icon, btnIc, menu, toast, longPress, autosize, sheet, popbar, confirm, pickImage } from '../../core/ui.js';
 import * as D from '../../core/data.js';
 import { sep, md } from '../../core/time.js';
 import { fmtYuan, makeVoice, quoteText } from '../../core/parse.js';
 import * as CS from '../../core/chat.js';
-import { photoTile, viewPhoto, fwdCard, bookCover } from '../shared.js';
+import { photoTile, imgTile, albumTile, viewPhoto, fwdCard, bookCover } from '../shared.js';
 import { join as joinBook } from '../../core/read.js';
 import * as G from '../../core/game.js';
 import { editChar } from './char.js';
@@ -65,9 +65,9 @@ export function openChat(ctx, cid, { at = null } = {}) {
     if (text) { sendParts([{ t: 'text', text }]); ta.value = ''; fit(); drawSend(); return; }
     if (CS.busy(cid)) CS.stop(cid);
   });
-  function sendParts(parts) {
+  function sendParts(parts, opt) {
     if (quote && (parts[0].t === 'text' || parts[0].t === 'voice')) { parts[0].quote = quote; setQuote(null); }
-    CS.send(cid, parts);
+    CS.send(cid, parts, opt);
     toBottom(true);
   }
   function drawAux() {
@@ -93,18 +93,18 @@ export function openChat(ctx, cid, { at = null } = {}) {
     if (!p) return;
     quote = null;
     editing = { id: r.id, i, draft: editing ? editing.draft : ta.value };
-    ta.value = p.t === 'photo' ? p.desc : p.text;
+    ta.value = p.t === 'photo' || p.t === 'img' ? p.desc || '' : p.text;
     drawAux(); fit(); drawSend();
     ta.focus();
   }
   function endEdit(save) {
     if (!editing) return;
     const v = ta.value.trim();
-    if (save && !v) { toast('不能是空的'); return; }
+    const r = D.msgs(cid).find((x) => x.id === editing.id), p = r && D.partsOf(r)[editing.i];
+    if (save && !v && p?.t !== 'img') { toast('不能是空的'); return; } // 真图片的那句可以不写
     if (save) {
-      const r = D.msgs(cid).find((x) => x.id === editing.id), p = r && D.partsOf(r)[editing.i];
       if (p) {
-        if (p.t === 'photo') p.desc = v;
+        if (p.t === 'photo' || p.t === 'img') p.desc = v;
         else if (p.t === 'voice') Object.assign(p, makeVoice(v), p.quote ? { quote: p.quote } : {});
         else p.text = v;
         D.touchMsgs(cid);
@@ -267,6 +267,11 @@ export function openChat(ctx, cid, { at = null } = {}) {
       return st ? h('img', { class: 'stk', src: st.src, alt: p.name, draggable: 'false' }) : h('div', { class: 'stk-miss' }, h('span', { html: icon('smile') }), p.name);
     }
     if (p.t === 'photo') return photoTile(p.desc, { cls: 'bub-ph', onclick: () => viewPhoto({ desc: p.desc, ts: r.ts, who: mine ? 'me' : cid }) });
+    if (p.t === 'img') {
+      const el = imgTile(p.file, { cls: 'bub-ph bub-img', alt: p.desc, onclick: () => viewPhoto({ desc: p.desc, file: p.file, ts: r.ts, who: mine ? 'me' : cid }) });
+      if (p.w && p.h) el.style.aspectRatio = `${p.w} / ${p.h}`; // 图还没画出来就占好位置，不会跳
+      return el;
+    }
     if (p.t === 'pay' || p.t === 'red') {
       const state = p.state === 'open' ? 'wait' : p.state;
       const st = { wait: mine ? '等对方收款' : '点一下收款', taken: '已收款', back: '已退还' }[state];
@@ -312,7 +317,7 @@ export function openChat(ctx, cid, { at = null } = {}) {
     if (!p) return;
     popbar(anchor, [
       ['quote', () => { if (editing) endEdit(false); setQuote({ who: r.role === 'me' ? 'me' : 'them', text: quoteText(p) }); ta.focus(); }, '引用'],
-      ['text', 'voice', 'photo'].includes(p.t) ? ['edit', () => startEdit(r, i), '编辑'] : null,
+      ['text', 'voice', 'photo', 'img'].includes(p.t) ? ['edit', () => startEdit(r, i), '编辑'] : null,
       p.t === 'soup' && !p.revealed ? ['eye', () => G.reveal(cid, p, '你翻开了汤底'), '翻开汤底'] : null,
       r.role === 'me' ? ['undo', () => { if (editing?.id === r.id) endEdit(false); CS.recall(cid, r.id, i); }, '撤回'] : null,
       isLast ? ['redo', () => regen(), '重新回复'] : null,
@@ -351,12 +356,35 @@ export function openChat(ctx, cid, { at = null } = {}) {
     }
   }
   const tile = (ic, name, fn) => h('button', { class: 'ch-tile', 'aria-label': name, onclick: fn }, h('span', { html: icon(ic) }));
+  // 相册：第一格 ＋ 从手机里挑一张真图片（写一句给他看），后面是相册里的（挑了的不再存一遍）
   function pickPhoto() {
     const ps = D.photosOf();
     const grid = h('div', { class: 'ph-grid' });
     const s = sheet({ title: '相册', body: grid, full: true });
-    if (!ps.length) grid.append(h('div', { class: 'empty', text: '相册是空的' }));
-    for (const p of ps) grid.append(photoTile(p.desc, { onclick: () => { s.close(); sendParts([{ t: 'photo', desc: p.desc }]); } }));
+    grid.append(h('button', { class: 'ph ph-add', 'aria-label': '从手机里选', html: icon('plus'), onclick: async () => {
+      const src = await pickImage({ max: 1280, quality: 0.8 });
+      if (!src) return;
+      s.close();
+      const got = await imgSheet(src);
+      if (!got) return;
+      sendParts([{ t: 'img', file: D.saveImage(src), desc: got.desc, w: got.w, h: got.h }]);
+    } }));
+    for (const p of ps) grid.append(albumTile(p, { onclick: () => {
+      s.close();
+      sendParts([p.file ? { t: 'img', file: p.file, desc: p.desc || '', w: p.w, h: p.h } : { t: 'photo', desc: p.desc }], { album: false });
+    } }));
+  }
+  /** 发真图片前：上面是图，下面写一句（他看不见图，只读这句；可以不写）。返回 { desc, w, h }，没发是 null */
+  function imgSheet(src) {
+    return new Promise((res) => {
+      const t1 = h('textarea', { class: 'dlg-in', rows: 3 });
+      const pre = h('img', { class: 'img-pre', src, alt: '' });
+      let done = false;
+      const s = sheet({ title: '', onClose: () => { if (!done) res(null); }, body: h('div', { class: 'money img-send' },
+        pre,
+        h('label', {}, t1),
+        h('button', { class: 'btn wide', text: '发送', onclick: () => { done = true; res({ desc: t1.value.trim(), w: pre.naturalWidth || 0, h: pre.naturalHeight || 0 }); s.close(); } })) });
+    });
   }
   /** 写一段字（照片的画面、语音说的话）。返回文字或 null */
   function textSheet(title) {

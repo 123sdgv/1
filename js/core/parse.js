@@ -181,6 +181,8 @@ export function partText(p, full = false) {
     case 'voice': return q + `[语音] ${p.text}`;
     case 'sticker': return `[表情包 ${p.name}]`;
     case 'photo': return `[图片] ${p.desc}`;
+    // 真图片：他看不见，只读你写的那句；没写就只知道发了张图
+    case 'img': return p.desc ? `[图片] ${p.desc}` : '[图片]（一张照片，没说拍的是什么）';
     case 'red':
     case 'pay': return `[转账 ${yuan(p.amount)}] ${p.note || ''}（${PAY_STATE[p.state] || ''}）`.replace('  ', ' ');
     case 'event': return `[日程 ${p.yearly ? '每年 ' + p.date.slice(5) : p.date}] ${p.title}`;
@@ -206,7 +208,8 @@ export function partPreview(p) {
     case 'text': return p.text;
     case 'voice': return '[语音] ' + p.text;
     case 'sticker': return '[表情包] ' + p.name;
-    case 'photo': return '[图片]';
+    case 'photo':
+    case 'img': return '[图片]';
     case 'red':
     case 'pay': return '[转账]' + (p.note ? ' ' + p.note : '');
     case 'event': return '[日程] ' + p.title;
@@ -227,7 +230,7 @@ export function partSearchText(p) {
 }
 /** 引用里显示的那句（照片带上画面） */
 export function quoteText(p, max = QUOTE_MAX) {
-  const s = p.t === 'photo' ? '[图片] ' + p.desc : partPreview(p);
+  const s = (p.t === 'photo' || p.t === 'img') && p.desc ? '[图片] ' + p.desc : partPreview(p);
   return s.length > max ? s.slice(0, max) + '…' : s;
 }
 

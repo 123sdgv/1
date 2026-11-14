@@ -188,7 +188,7 @@ export function quoteWho(cid, text, beforeId = null, prefer = null) {
 function finish(c, rec, acts) {
   const parts = D.partsOf(rec);
   for (const p of parts) {
-    if (p.t === 'photo') D.addPhoto({ acc: c.acc, desc: p.desc, who: c.id });
+    if (p.t === 'photo') D.addPhoto({ acc: c.acc, desc: p.desc, who: c.id, char: c.id });
     if (p.t === 'event') D.addEvent({ date: p.date, title: p.title, yearly: p.yearly, by: c.id });
     if (p.quote && !p.quote.who) p.quote.who = quoteWho(c.id, p.quote.text, rec.id, 'me');
   }
@@ -263,6 +263,7 @@ export function removeParts(cid, drop) {
     left.push(r);
   }
   D.setMsgs(cid, left);
+  D.gcImages();
 }
 /** 全删（日记、备忘录不动）。他正在回的那条也停下 */
 export function clearChat(cid) {
@@ -271,13 +272,14 @@ export function clearChat(cid) {
   D.setMsgs(cid, []);
   stop(cid);
   D.setMeta(cid, { unread: 0 });
+  D.gcImages();
 }
 
-/** 你发一条（可以是几个部件）。发完他会自动回 */
-export function send(cid, parts) {
+/** 你发一条（可以是几个部件）。发完他会自动回。照片、图片存进相册（album: false = 本来就是从相册挑的） */
+export function send(cid, parts, { album = true } = {}) {
   const rec = D.addMsg(cid, { role: 'me', alts: [parts] });
   const c = D.charById(cid);
-  for (const p of parts) if (p.t === 'photo') D.addPhoto({ acc: c?.acc, desc: p.desc, who: 'me' });
+  if (album) for (const p of parts) if (p.t === 'photo' || p.t === 'img') D.addPhoto({ acc: c?.acc, desc: p.desc || '', file: p.file, w: p.w, h: p.h, who: 'me', char: cid });
   // 你在聊天里把自己的邮箱发给他了：他就记住了
   const addr = c && D.myAddr(D.accounts().find((a) => a.id === c.acc));
   if (addr && c.knowMail !== addr && parts.some((p) => (p.text || '').toLowerCase().includes(addr))) D.saveChar({ ...c, knowMail: addr });

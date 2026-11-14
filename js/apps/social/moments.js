@@ -16,8 +16,10 @@ const whoOf = (w) => (w === 'me' ? { name: D.curAccount().name || '我', avatar:
 function pickFromAlbum(onPick) {
   const grid = h('div', { class: 'ph-grid' });
   const s = sheet({ title: '相册', body: grid, full: true });
-  if (!D.photosOf().length) grid.append(h('div', { class: 'empty', text: '相册是空的' }));
-  for (const p of D.photosOf()) grid.append(photoTile(p.desc, { onclick: () => { s.close(); onPick(p.desc); } }));
+  // 动态里的图都是文字照片：相册里的真图片不在这里挑
+  const list = D.photosOf().filter((p) => !p.file);
+  if (!list.length) grid.append(h('div', { class: 'empty', text: '相册是空的' }));
+  for (const p of list) grid.append(photoTile(p.desc, { onclick: () => { s.close(); onPick(p.desc); } }));
 }
 
 export function momentsPane(ctx) {
@@ -255,7 +257,7 @@ export function composeMoment({ fwd = null, onPosted = null } = {}) {
   };
   const addPhoto = () => menu([
     ['写一张照片', async () => { const v = await ask('配图', '', '', true); if (v?.trim()) { photos.push(v.trim()); drawStrip(); } }],
-    D.photosOf().length ? ['从相册选', () => pickFromAlbum((d) => { photos.push(d); drawStrip(); })] : null,
+    D.photosOf().some((p) => !p.file) ? ['从相册选', () => pickFromAlbum((d) => { photos.push(d); drawStrip(); })] : null,
   ]);
   drawStrip();
   drawFwd();

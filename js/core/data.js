@@ -126,6 +126,7 @@ export function removeChar(id, quiet) {
   }
   S.set('bookJobs', bookJobs().filter((j) => j.who !== id));
   S.set('games', games().filter((g) => g.char !== id));
+  gcImages();
   if (!quiet) emit('chars');
 }
 
@@ -231,7 +232,9 @@ export function stickerByName(name) {
   return all.find((x) => x.name === n) || all.filter((x) => x.name.includes(n) || n.includes(x.name)).sort((a, b) => b.name.length - a.name.length)[0] || null;
 }
 
-// ── 相册 ── { id, acc, desc, who, ts }
+// ── 相册 ── { id, acc, desc, who（谁拍的：me / 角色id）, char（在跟谁的聊天里发的）, file（真图片：存在 file.<file> 里）, ts }
+// 文字照片只有 desc；真图片有 file，desc 是你给它写的那句（他看不见图，只读这句）。
+// 真图片的文件聊天和相册共用一份：相册里删了聊天里还在，两边都没人用了才删（gcImages）
 export const photos = () => S.get('photos', []);
 export const photosOf = (acc = curAccount().id) => photos().filter((p) => p.acc === acc).sort((a, b) => b.ts - a.ts);
 export function addPhoto(p) {
@@ -242,7 +245,32 @@ export function addPhoto(p) {
   emit('photos');
   return rec;
 }
-export function setPhotos(arr) { S.set('photos', arr); emit('photos'); }
+export function setPhotos(arr) { S.set('photos', arr); emit('photos'); gcImages(); }
+/** 存一张真图片，返回它的键（聊天部件、相册里记这个） */
+export function saveImage(dataUrl) { const k = 'img.' + uid(); setFile(k, dataUrl); return k; }
+/** 真图片：聊天记录、相册都不用了的就删掉（删聊天、删相册、删角色之后过一会儿查一次） */
+let gcT = 0;
+export function gcImages() {
+  clearTimeout(gcT);
+  gcT = setTimeout(() => {
+    const used = new Set(photos().map((p) => p.file).filter(Boolean));
+    for (const k of S.keys('msgs.')) for (const r of S.get(k, [])) for (const alt of r.alts || []) for (const p of alt || []) {
+      if (p?.file) used.add(p.file);
+      if (p?.was?.file) used.add(p.was.file);
+    }
+    for (const k of S.keys('file.img.')) if (!used.has(k.slice(5))) S.del(k);
+  }, 1500);
+}
+/** 老存档：你在聊天里发的文字照片，相册里没记是跟谁的 → 按聊天记录补上 */
+export function fixPhotoChars() {
+  const list = photos(), need = list.filter((p) => p.who === 'me' && !p.char);
+  if (!need.length) return;
+  const at = new Map();
+  for (const k of S.keys('msgs.')) for (const r of S.get(k, [])) if (r.role === 'me') for (const p of partsOf(r)) if (p.t === 'photo' && !at.has(p.desc)) at.set(p.desc, k.slice(5));
+  let n = 0;
+  for (const p of need) if (at.has(p.desc) && charById(at.get(p.desc))) { p.char = at.get(p.desc); n++; }
+  if (n) S.set('photos', list);
+}
 
 // ── 线下剧情 ── { id, acc, char, title, scene, createdAt, lastTs }，记录在 story.<id>，结构和聊天一样（部件只有 text）
 // 不用社交里的角色、自己写的：char 为空、acc 为空（哪个身份下都看得到），设定在 card 里
